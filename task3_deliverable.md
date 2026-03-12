@@ -6,9 +6,9 @@ Cosine similarity was computed between the patent-context embedding and the pape
 
 | Statistic | Value |
 |---|---|
-| Mean | 0.352 |
-| Median | 0.357 |
-| Std Dev | 0.152 |
+| Mean | 0.441 |
+| Median | 0.443 |
+| Std Dev | 0.140 |
 | Min | -0.008 |
 | Max | 0.843 |
 
@@ -16,7 +16,7 @@ Cosine similarity was computed between the patent-context embedding and the pape
 
 ![Histogram of Cosine Similarity](visualizations/cosine_similarity_distribution.png)
 
-The distribution is approximately bell-shaped and centred around 0.35, indicating moderate but not high semantic alignment between patent and paper usage on average. The std of 0.15 shows meaningful variation across focal terms. Some are used in very similar contexts, others in quite different ones.
+The distribution is approximately bell-shaped and centred around 0.44, indicating moderate semantic alignment between patent and paper usage on average. The std of 0.14 shows meaningful variation across focal terms. Some are used in very similar contexts, others in quite different ones.
 
 ---
 
