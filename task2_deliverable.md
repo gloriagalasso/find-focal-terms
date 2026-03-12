@@ -27,19 +27,12 @@ The histogram shows the number of focal terms per patent. The red dashed line ma
 
 ## Brief Descriptive Interpretation
 
-The 101 patents share on average **7.8 focal terms** with their cited scientific papers, totalling **790 unique (patent_id, focal_term) pairs**. However, the 494 unique term strings (vs. 790 pairs) show that the same term — e.g. *"cell"* or *"sequence"* — can be a focal term across multiple patents.
+The 101 patents share on average **7.8 focal terms** with their cited scientific papers, totalling **790 unique (patent_id, focal_term) pairs**. The distribution is right-skewed: most patents have few focal terms, while a small number have many.
 
-The distribution is **right-skewed**: most patents have relatively few focal terms, while a small number have many. This suggests that terminological overlap between patents and science is generally limited, with occasional exceptions where a patent is deeply embedded in scientific vocabulary.
+**Examples:**
 
-**Key thresholds:**
-- **25% of patents** have ≤ 3 focal terms → minimal overlap with cited science
-- **50% of patents** have ≤ 6 focal terms → moderate overlap
-- **75% of patents** have ≤ 11 focal terms → strong overlap is the exception, not the rule
-
-**Illustrative examples:**
-
-| Patent ID | Focal Terms (n) | Example Terms | Interpretation |
-|---|---|---|---|
-| 7749408 | 1 (min) | *"room"* | Near-zero terminological overlap; the cited paper shares almost no vocabulary with the patent |
-| 7884261 | 6 (median) | *"increase", "plant", "promoter", "rice", "transgenic", "yield"* | Typical patent — moderate, domain-specific overlap with agricultural/biological science |
-| 8280136 | 30 (max) | *"cardiac", "heart", "dyssynchrony", "myocardial", "device", "model", ...* | Strongly grounded in medical/cardiac scientific literature; high terminological alignment |
+| Patent ID | Focal Terms (n) | Focal Terms |
+|---|---|---|
+| 7749408 | 1 (min) | *"room"* |
+| 7884261 | 6 (median) | *"increase", "plant", "promoter", "rice", "transgenic", "yield"* |
+| 8280136 | 30 (max) | *"cardiac", "heart", "dyssynchrony", "myocardial", "device", "model", ...* |
