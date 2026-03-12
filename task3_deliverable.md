@@ -22,25 +22,73 @@ The distribution is approximately bell-shaped and centred around 0.44, indicatin
 
 ## Examples: Highest and Lowest Semantic Similarity
 
-### Highest Similarity — `asbestos-related` (patent 8168398, sim = 0.843)
+### Top 3 Highest Similarity — Focal Terms Used in Similar Contexts
+
+**1. `asbestos-related` (patent 8168398, sim = 0.843)**
 
 | | Context (sample) |
 |---|---|
 | **Patent** | indicates, increased, having, method, human, assaying, concluded, mesothelioma, presence |
 | **Paper** | significant, nonmalignant, mesothelioma, cancer, enzyme-linked, presence, disease, asbestos, milliliter |
 
-Both patent and paper revolve around the same narrow clinical domain (mesothelioma diagnosis), sharing terms like *mesothelioma*, *presence*, *disease* — leading to very high contextual alignment.
+Both revolve around mesothelioma diagnosis — a narrow clinical domain with tight shared vocabulary.
 
 ---
 
-### Lowest Similarity — `first` (patent 7838242, sim = -0.008)
+**2. `asbestos` (patent 8168398, sim = 0.820)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | indicates, increased, having, method, human, assaying, concluded, mesothelioma, presence |
+| **Paper** | functional, significant, letter, radiograph, chemoprevention, mesothelioma, error, cancer, enzyme-linked, presence |
+
+Same patent, same clinical context — mesothelioma and cancer terminology dominates both sides.
+
+---
+
+**3. `presence` (patent 8168398, sim = 0.801)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | indicates, increased, having, method, human, assaying, concluded, mesothelioma, age-matched |
+| **Paper** | significant, nonmalignant, mesothelioma, cancer, enzyme-linked, disease, asbestos, milliliter, normal |
+
+Though *presence* is a common word, here it is embedded in identical domain-specific contexts on both sides.
+
+---
+
+### Bottom 3 Lowest Similarity — Focal Terms Used in Different Contexts
+
+**1. `first` (patent 7838242, sim = -0.008)**
 
 | | Context (sample) |
 |---|---|
 | **Patent** | hollow, bacteria, listeria monocytogenes, method, internalin a, release, assaying, end |
 | **Paper** | population-based, hypoglycemia, found, insulin, major, long-term, pump, risk |
 
-The patent is about a bacterial delivery device while the cited paper is about insulin/diabetes. The term *"first"* is generic and meaningless without context — the two vocabularies are completely unrelated, resulting in near-zero similarity.
+Patent is about a bacterial delivery device; cited paper is about insulin/diabetes. *"First"* is a generic ordinal with no domain meaning — the two vocabularies are completely unrelated.
+
+---
+
+**2. `second` (patent 7838242, sim = -0.006)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | hollow, bacteria, listeria monocytogenes, method, internalin a, release, assaying, end |
+| **Paper** | population-based, hypoglycemia, found, insulin, major, long-term, pump, risk |
+
+Same patent/paper mismatch as above — *"second"* is equally generic and the sub-fields are unrelated.
+
+---
+
+**3. `group` (patent 7790843, sim = 0.010)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | amino acids, selected, 1-220, 221-454, amino acid sequence, sequence, 350-454, amino acid, 1-450, seq |
+| **Paper** | same, grouping, cortex, male, cerebral, diencephalon, cortical, investigation, morphometric, region |
+
+Patent uses *"group"* in the sense of amino acid sequence ranges; the paper uses it for brain region groupings — entirely different meanings.
 
 ---
 
