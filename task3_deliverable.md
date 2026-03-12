@@ -20,6 +20,30 @@ The distribution is approximately bell-shaped and centred around 0.44, indicatin
 
 ---
 
+## Examples: Highest and Lowest Semantic Similarity
+
+### Highest Similarity — `asbestos-related` (patent 8168398, sim = 0.843)
+
+| | Context (sample) |
+|---|---|
+| **Patent** | indicates, increased, having, method, human, assaying, concluded, mesothelioma, presence |
+| **Paper** | significant, nonmalignant, mesothelioma, cancer, enzyme-linked, presence, disease, asbestos, milliliter |
+
+Both patent and paper revolve around the same narrow clinical domain (mesothelioma diagnosis), sharing terms like *mesothelioma*, *presence*, *disease* — leading to very high contextual alignment.
+
+---
+
+### Lowest Similarity — `first` (patent 7838242, sim = -0.008)
+
+| | Context (sample) |
+|---|---|
+| **Patent** | hollow, bacteria, listeria monocytogenes, method, internalin a, release, assaying, end |
+| **Paper** | population-based, hypoglycemia, found, insulin, major, long-term, pump, risk |
+
+The patent is about a bacterial delivery device while the cited paper is about insulin/diabetes. The term *"first"* is generic and meaningless without context — the two vocabularies are completely unrelated, resulting in near-zero similarity.
+
+---
+
 ## Cosine Similarity per Focal Term
 
 | Patent ID | Focal Term | Cosine Similarity |
