@@ -330,6 +330,49 @@
               </table>
             </div>
           </div>
+
+          <!-- Deliverable Content -->
+          <div class="mb-8">
+            <h3 class="text-xl font-semibold text-gray-900 mb-4">Full Deliverable (Sample)</h3>
+            <pre class="bg-gray-100 p-4 rounded text-sm text-gray-800 overflow-x-auto"><code># Task 2 — Descriptive Statistics and Distribution of Overlap
+
+## Summary Statistics
+
+| Metric | Value |
+|---|---|
+| Total (patent_id, focal_term) pairs | 790 |
+| Unique patents | 101 |
+| Unique focal terms | 494 |
+| Mean focal terms per patent | 7.82 |
+| Median focal terms per patent | 6.00 |
+| Std Dev | 6.83 |
+| Min | 1 |
+| 25th percentile | 3 |
+| 75th percentile | 11 |
+| Max | 30 |
+
+---
+
+## Distribution Plot
+
+![Histogram of Focal Terms per Patent](../visualizations/histogram_focal_terms.png)
+
+The histogram shows the number of focal terms per patent. The red dashed line marks the **mean (7.82)** and the orange dashed line marks the **median (6.00)**. The gap between mean and median confirms the distribution is **right-skewed**; a few patents with many focal terms pull the mean upward.
+
+---
+
+## Brief Descriptive Interpretation
+
+The 101 patents share on average **7.8 focal terms** with their cited scientific papers, totalling **790 unique (patent_id, focal_term) pairs**. The distribution is right-skewed: most patents have few focal terms, while a small number have many.
+
+**Examples:**
+
+| Patent ID | Focal Terms (n) | Focal Terms |
+|---|---|---|
+| 7749408 | 1 (min) | *"room"* |
+| 7884261 | 6 (median) | *"increase", "plant", "promoter", "rice", "transgenic", "yield"* |
+| 8280136 | 30 (max) | *"cardiac", "heart", "dyssynchrony", "myocardial", "device", "model", ...* |</code></pre>
+          </div>
         </template>
 
         <!-- ─ FULL ─ -->
@@ -653,6 +696,159 @@ NOTE: maybe due to dropping a lot of general terms?</code></pre>
             High similarity for specific pharmacological and chemical terms; low similarity for generic
             stop-word-like terms (<em>known</em>, <em>following</em>, <em>up</em>) that carry no shared semantic content.
           </p>
+        </div>
+
+        <!-- Deliverable Content -->
+        <div v-if="task3Dataset === 'sample'" class="mt-8">
+          <h3 class="text-xl font-semibold text-gray-900 mb-4">Full Deliverable (Sample)</h3>
+          <pre class="bg-gray-100 p-4 rounded text-sm text-gray-800 overflow-x-auto"><code># Task 3 — Semantic Comparison Results
+
+## Quantitative Similarity Measure
+
+Cosine similarity was computed between the patent-context embedding and the paper-context embedding for each focal term. Scores range from -1 to 1, where 1 means identical context and 0 means unrelated.
+
+| Statistic | Value |
+|---|---|
+| Mean | 0.441 |
+| Median | 0.443 |
+| Std Dev | 0.140 |
+| Min | -0.008 |
+| Max | 0.843 |
+
+## Distribution Plot
+
+![Histogram of Cosine Similarity](../visualizations/cosine_similarity_distribution.png)
+
+The distribution is approximately bell-shaped and centred around 0.44, indicating moderate semantic alignment between patent and paper usage on average. The std of 0.14 shows meaningful variation across focal terms. Some are used in very similar contexts, others in quite different ones.
+
+---
+
+## Examples: Highest and Lowest Semantic Similarity
+
+### Top 3 Highest Similarity — Focal Terms Used in Similar Contexts
+
+**1. `asbestos-related` (patent 8168398, sim = 0.843)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | indicates, increased, having, method, human, assaying, concluded, mesothelioma, presence |
+| **Paper** | significant, nonmalignant, mesothelioma, cancer, enzyme-linked, presence, disease, asbestos, milliliter |
+
+Both revolve around mesothelioma diagnosis — a narrow clinical domain with tight shared vocabulary.
+
+---
+
+**2. `asbestos` (patent 8168398, sim = 0.820)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | indicates, increased, having, method, human, assaying, concluded, mesothelioma, presence |
+| **Paper** | functional, significant, letter, radiograph, chemoprevention, mesothelioma, error, cancer, enzyme-linked, presence |
+
+Same patent, same clinical context — mesothelioma and cancer terminology dominates both sides.
+
+---
+
+**3. `presence` (patent 8168398, sim = 0.801)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | indicates, increased, having, method, human, assaying, concluded, mesothelioma, age-matched |
+| **Paper** | significant, nonmalignant, mesothelioma, cancer, enzyme-linked, disease, asbestos, milliliter, normal |
+
+Though *presence* is a common word, here it is embedded in identical domain-specific contexts on both sides.
+
+---
+
+### Bottom 3 Lowest Similarity — Focal Terms Used in Different Contexts
+
+**1. `first` (patent 7838242, sim = -0.008)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | hollow, bacteria, listeria monocytogenes, method, internalin a, release, assaying, end |
+| **Paper** | population-based, hypoglycemia, found, insulin, major, long-term, pump, risk |
+
+Patent is about a bacterial delivery device; cited paper is about insulin/diabetes. *"First"* is a generic ordinal with no domain meaning — the two vocabularies are completely unrelated.
+
+---
+
+**2. `second` (patent 7838242, sim = -0.006)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | hollow, bacteria, listeria monocytogenes, method, internalin a, release, assaying, end |
+| **Paper** | population-based, hypoglycemia, found, insulin, major, long-term, pump, risk |
+
+Same patent/paper mismatch as above — *"second"* is equally generic and the sub-fields are unrelated.
+
+---
+
+**3. `group` (patent 7790843, sim = 0.010)**
+
+| | Context (sample) |
+|---|---|
+| **Patent** | amino acids, selected, 1-220, 221-454, amino acid sequence, sequence, 350-454, amino acid, 1-450, seq |
+| **Paper** | same, grouping, cortex, male, cerebral, diencephalon, cortical, investigation, morphometric, region |
+
+Patent uses *"group"* in the sense of amino acid sequence ranges; the paper uses it for brain region groupings — entirely different meanings.
+
+---
+
+## Cosine Similarity per Focal Term
+
+| Patent ID | Focal Term | Cosine Similarity |
+|---|---|---|
+| 7662783 | alpha | 0.363 |
+| 7662783 | antagonist | 0.353 |
+| 7662783 | cell | 0.337 |
+| 7662783 | collagen | 0.365 |
+| 7662783 | colon | 0.374 |
+| 7662783 | effect | 0.258 |
+| 7662783 | effective | 0.324 |
+| 7662783 | growth | 0.378 |
+| 7662783 | lung | 0.350 |
+| 7662783 | melanoma | 0.370 |
+| 7662783 | peptide | 0.392 |
+| 7662783 | proliferation | 0.390 |
+| 7662783 | sequence | 0.147 |
+| 7662783 | skin | 0.348 |
+| 7662783 | treatment | 0.369 |
+| 7662783 | tumor | 0.372 |
+| 7700783 | agent | 0.173 |
+| 7700783 | hydroxyl | 0.276 |
+| 7704363 | and | 0.285 |
+| 7704363 | concentration | 0.433 |
+| 7704363 | maximum | 0.292 |
+| 7704363 | presence | 0.360 |
+| 7723513 | bis | 0.536 |
+| 7723513 | copper | 0.565 |
+| 7723513 | coupling | 0.572 |
+| 7723513 | dichloromethane | 0.421 |
+| 7723513 | dipyrrinato | 0.552 |
+| 7723513 | metal | 0.546 |
+| 7723513 | palladium | 0.587 |
+| 7723513 | reaction | 0.558 |
+| 7723513 | solvent | 0.398 |
+| 7723513 | toluene | 0.582 |
+| 7723513 | zinc | 0.594 |
+| 7741269 | exendin-4 | 0.379 |
+| 7741269 | peptide | 0.294 |
+| 7741269 | sequence | 0.255 |
+| 7741269 | treatment | 0.268 |
+| 7749408 | room | 0.340 |
+| 7754703 | aryl | 0.256 |
+| 7754703 | compound | 0.147 |
+| 7754703 | group | 0.024 |
+| 7754703 | phosphate | 0.101 |
+| 7754703 | phosphonate | 0.265 |
+| 7754860 | hormone | 0.418 |
+| 7754860 | mg | 0.427 |
+| 7754860 | recombinant | 0.409 |
+| 7754909 | solution | 0.349 |
+| 7766658 | diagnosis | 0.470 |
+| 7766658 | disease | 0.452 |
+| 7766658 | drug | 0.336 |</code></pre>
         </div>
 
         <!-- Deliverable Content -->
