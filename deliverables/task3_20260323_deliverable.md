@@ -19,7 +19,7 @@ For each focal term, a sentence embedding was computed for both its patent conte
 | Min | -0.109 |
 | Max | 0.795 |
 
-The distribution is approximately symmetric and centred around 0.38, indicating **moderate semantic alignment** between patent and paper usage on average. The std of 0.13 shows meaningful variation. Some terms are used in very similar contexts, others in quite different ones.
+The distribution is approximately symmetric and centred around 0.38. The std of 0.13 shows meaningful variation. Some terms are used in very similar contexts, others in quite different ones.
 
 ---
 
