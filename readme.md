@@ -101,3 +101,40 @@
 5. **Compute cosine similarity.** Summary statistics: mean 0.375, median 0.379, std 0.128, min -0.109, max 0.795.
 
 **Output:** `deliverables/task3_20260323_deliverable.md`, `output/cosine_similarity_results_20260323.parquet`, `visualizations/cosine_similarity_distribution_20260323.png`.
+
+---
+
+## Validation Task — GLiNER Claim-Level Evaluation
+
+**Goal:** Evaluate how well GLiNER extracts meaningful scientific and technical terms from patent claims, and how accurately it assigns semantic labels. This is not strict biomedical NER evaluation — the aim is to assess whether GLiNER identifies the "idea terms" that matter for the focal-term pipeline.
+
+**Steps:**
+
+1. **Sample 100 claims** at random (`seed=42`) from patents with `GrantedDate ≥ 2000` that appear in the GLiNER dataset. Each claim belongs to a different patent.
+
+2. **Filter GLiNER terms to claim level.** GLiNER runs at patent level; terms were filtered to those that appear as a case-insensitive substring of the sampled `claim_text`, making the comparison fair against human annotations.
+
+3. **Human annotation.** Each of the 100 claims was manually annotated: terms identified, approximate semantic labels assigned from the 127-label GLiNER/UMLS inventory, stored in compact format (one row per claim, semicolon-separated).
+
+4. **Format conversion.** Human annotations converted from compact to long format (one row per term). Term normalization: lowercase, strip whitespace, collapse internal spaces.
+
+5. **Comparison.** For each human term, a match was sought among GLiNER terms in the same `patent_id + claim_number`: exact (normalized strings identical) or partial (substring in either direction). Labels compared for matched terms.
+
+6. **Metrics.** Precision, recall, F1, and label accuracy computed. GLiNER-only and human-only terms identified and saved.
+
+**Key results:**
+
+| Metric | Value |
+|--------|-------|
+| Human-annotated terms | 502 |
+| GLiNER terms (unique per claim) | 1 848 |
+| Exact matches | 246 |
+| Partial matches | 250 |
+| Precision | 0.27 |
+| Recall | 0.99 |
+| F1 | 0.42 |
+| Label accuracy (matched terms) | 0.34 |
+
+**Main findings:** GLiNER has near-perfect recall but low precision — it extracts ~3.7× more terms than humans. The 904 unmatched GLiNER terms are dominated by patent legal boilerplate (`wherein`, `method`, `claim`). Half of all matches are partial, reflecting a systematic span boundary problem. Label accuracy is low (0.34) but most confusions are between hierarchically adjacent categories (e.g. Organic Chemical ↔ Chemical).
+
+**Output:** `deliverables/validation_deliverable.md`, `visualizations/validation_visualizations/` (4 plots), `output/validation_outputs/` (2 CSVs), `data/annotation/` (evaluation tables).
