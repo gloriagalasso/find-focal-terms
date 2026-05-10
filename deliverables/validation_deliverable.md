@@ -241,3 +241,6 @@ CSV: `output/validation_outputs/top_missed_human_terms_100.csv`
 **Span boundaries are imprecise.** For the focal-term pipeline, partial matches (GLiNER extracts a substring or superstring of the human term) are likely acceptable in most cases, since the correct conceptual entity is identified. Tasks requiring exact entity boundaries would need additional span refinement.
 
 **Label agreement is limited but systematic.** For downstream tasks that rely on semantic labels (e.g., filtering to only chemical entities or medical devices), GLiNER's label assignment should be treated as approximate. The most reliable labels appear to be those for well-defined ontological categories (Chemical, Anatomical Structure, Medical Device); the weakest are for abstract functional categories (Spatial Concept, Functional Concept) which GLiNER over-applies to non-conceptual terms.
+
+### Gloria's suggestion
+Reduce the number of GLiNER labels. The current inventory contains 127 labels, which makes the annotation and evaluation process unnecessarily complex for both human annotators and the model.
