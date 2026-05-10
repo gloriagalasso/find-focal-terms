@@ -7,3 +7,4 @@ output/*.parquet
 
 # System
 .DS_Store
+data

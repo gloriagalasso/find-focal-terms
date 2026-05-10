@@ -1,38 +1,29 @@
-# Task 2 — Descriptive Statistics and Distribution of Overlap
+# Task 2 — Measure Overlap Intensity
 
 ## Summary Statistics
 
-| Metric | Value |
-|---|---|
-| Total (patent_id, focal_term) pairs | 790 |
-| Unique patents | 101 |
-| Unique focal terms | 494 |
-| Mean focal terms per patent | 7.82 |
-| Median focal terms per patent | 6.00 |
-| Std Dev | 6.83 |
-| Min | 1 |
-| 25th percentile | 3 |
-| 75th percentile | 11 |
-| Max | 30 |
+| Statistic | Value |
+|-----------|-------|
+| Total (patent_id, focal_term) pairs | 94 |
+| Unique patents | 53 |
+| Unique focal term strings | 56 |
+| Mean focal terms per patent | 1.77 |
+| Median focal terms per patent | 1.00 |
+| Std Dev | 1.55 |
+| Min | 1 focal term(s) |
+| Max | 9 focal terms |
+| Patents with exactly 1 focal term | 35 (66.0%) |
+| Patents with 2+ focal terms | 18 (34.0%) |
+| Patents with 5+ focal terms | 3 (5.7%) |
 
----
+## Interpretation
 
-## Distribution Plot
+The 53 patents in this sample share on average **1.77 focal terms** with their cited scientific papers (median = 1), giving **94 unique (patent_id, focal_term) pairs** across **56 distinct terms**.
 
-![Histogram of Focal Terms per Patent](../visualizations/histogram_focal_terms.png)
+The distribution is **strongly right-skewed**: most patents share only a single focal term with cited literature, while a small number show broader terminological overlap.
 
-The histogram shows the number of focal terms per patent. The red dashed line marks the **mean (7.82)** and the orange dashed line marks the **median (6.00)**. The gap between mean and median confirms the distribution is **right-skewed**; a few patents with many focal terms pull the mean upward.
+## Examples
 
----
-
-## Brief Descriptive Interpretation
-
-The 101 patents share on average **7.8 focal terms** with their cited scientific papers, totalling **790 unique (patent_id, focal_term) pairs**. The distribution is right-skewed: most patents have few focal terms, while a small number have many.
-
-**Examples:**
-
-| Patent ID | Focal Terms (n) | Focal Terms |
-|---|---|---|
-| 7749408 | 1 (min) | *"room"* |
-| 7884261 | 6 (median) | *"increase", "plant", "promoter", "rice", "transgenic", "yield"* |
-| 8280136 | 30 (max) | *"cardiac", "heart", "dyssynchrony", "myocardial", "device", "model", ...* |
+- Patent **10000538** (min = 1 focal term): 'amount'
+- Patent **10000537** (typical = 3 focal terms): 'sequence', 'transport', 'sugar'
+- Patent **10005908** (max = 9 focal terms): 'streptavidin', 'avidin', 'biological', 'protein', 'molecule', 'cell', 'biotin', 'complex', 'bond'
