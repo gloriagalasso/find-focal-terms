@@ -83,7 +83,7 @@ For matched terms, human and GLiNER labels were compared (`label_match = yes/no`
 
 ### Step 7 — Metrics and outputs
 
-Precision, recall, F1, and label accuracy were computed. Qualitative analysis and visualisations were produced and saved to `data/evaluation/`.
+Precision, recall, F1, and label accuracy were computed. Qualitative analysis and visualisations were produced and saved to `visualizations/validation_visualizations/`.
 
 ---
 
@@ -179,27 +179,35 @@ Label accuracy among matched terms is **0.34** (169 correct labels out of 496 ma
 
 ## 6. Visualisations
 
-All plots saved to `data/evaluation/`.
+All plots saved to `visualizations/validation_visualizations/`.
 
-### A. Evaluation metrics bar chart (`metrics_barplot_100.png`)
+### A. Evaluation metrics bar chart
+
+![Evaluation metrics bar chart](../visualizations/validation_visualizations/metrics_barplot_100.png)
 
 Bar chart showing precision (0.268), recall (0.988), and F1 (0.422). Visually illustrates the strong imbalance between recall and precision. Useful for thesis discussion of GLiNER's extraction behaviour.
 
-### B. Match type distribution (`match_distribution_100.png`)
+### B. Match type distribution
+
+![Match type distribution](../visualizations/validation_visualizations/match_distribution_100.png)
 
 Bar chart with four categories: exact matches (246), partial matches (250), human-only terms (6), GLiNER-only terms (904). Clearly shows that the dominant issue is GLiNER over-extraction (904 terms) rather than under-extraction (6 missed terms).
 
-### C. Top 20 GLiNER-only terms (`top_noisy_gliner_terms_100.png`)
+### C. Top 20 GLiNER-only terms
+
+![Top 20 GLiNER-only terms](../visualizations/validation_visualizations/top_noisy_gliner_terms_100.png)
 
 Horizontal bar chart of the 20 most frequent GLiNER-only terms, counted once per patent+claim. Dominated by patent boilerplate words (`wherein`, `method`, `claim`). Illustrates the noise pattern for thesis discussion.
 
-CSV: `top_noisy_gliner_terms_100.csv`
+CSV: `output/validation_outputs/top_noisy_gliner_terms_100.csv`
 
-### D. Top 20 human-only terms (`top_missed_human_terms_100.png`)
+### D. Top 20 human-only terms
+
+![Top 20 human-only terms](../visualizations/validation_visualizations/top_missed_human_terms_100.png)
 
 Horizontal bar chart of human-annotated terms not found by GLiNER. Very few (6 total, all appearing once). Confirms that GLiNER misses very little meaningful content.
 
-CSV: `top_missed_human_terms_100.csv`
+CSV: `output/validation_outputs/top_missed_human_terms_100.csv`
 
 ---
 
@@ -212,12 +220,12 @@ CSV: `top_missed_human_terms_100.csv`
 | `claim_level_evaluation_100.csv` | `data/annotation/` | Full evaluation table (1 row per human term, with match type and label match) |
 | `gliner_only_terms_100.csv` | `data/annotation/` | GLiNER terms with no human counterpart |
 | `human_only_terms_100.csv` | `data/annotation/` | Human terms missed by GLiNER |
-| `metrics_barplot_100.png` | `data/evaluation/` | Precision / Recall / F1 bar chart |
-| `match_distribution_100.png` | `data/evaluation/` | Match type distribution chart |
-| `top_noisy_gliner_terms_100.png` | `data/evaluation/` | Top 20 GLiNER-only terms chart |
-| `top_missed_human_terms_100.png` | `data/evaluation/` | Top 20 human-only terms chart |
-| `top_noisy_gliner_terms_100.csv` | `data/evaluation/` | Top 20 GLiNER-only terms table |
-| `top_missed_human_terms_100.csv` | `data/evaluation/` | Top 20 human-only terms table |
+| `metrics_barplot_100.png` | `visualizations/validation_visualizations/` | Precision / Recall / F1 bar chart |
+| `match_distribution_100.png` | `visualizations/validation_visualizations/` | Match type distribution chart |
+| `top_noisy_gliner_terms_100.png` | `visualizations/validation_visualizations/` | Top 20 GLiNER-only terms chart |
+| `top_missed_human_terms_100.png` | `visualizations/validation_visualizations/` | Top 20 human-only terms chart |
+| `top_noisy_gliner_terms_100.csv` | `output/validation_outputs/` | Top 20 GLiNER-only terms table |
+| `top_missed_human_terms_100.csv` | `output/validation_outputs/` | Top 20 human-only terms table |
 
 ---
 
