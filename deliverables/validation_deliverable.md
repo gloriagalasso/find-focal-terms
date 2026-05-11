@@ -233,11 +233,6 @@ CSV: `output/validation_outputs/top_missed_human_terms_100.csv`
 
 **GLiNER is suitable as a high-recall first-pass extractor.** With recall = 0.99 on 100 manually annotated claims, it misses almost no meaningful technical or scientific concept. For a pipeline whose goal is to identify which patents share idea terms with scientific literature, this is the more critical metric.
 
-**Noise filtering is the main task.** The 904 GLiNER-only terms — dominated by patent legal boilerplate — represent the primary failure mode. A targeted post-processing step should:
-1. Remove terms shorter than a minimum character length (e.g., ≤ 2 characters)
-2. Apply a patent boilerplate stop list (`wherein`, `claim`, `method`, `plurality`, `comprises`, etc.)
-3. Optionally filter terms with highly generic GLiNER labels (`Spatial Concept`, `Temporal Concept`, `Quantitative Concept`) unless accompanied by a meaningful noun
-
 **Span boundaries are imprecise.** For the focal-term pipeline, partial matches (GLiNER extracts a substring or superstring of the human term) are likely acceptable in most cases, since the correct conceptual entity is identified. Tasks requiring exact entity boundaries would need additional span refinement.
 
 **Label agreement is limited but systematic.** For downstream tasks that rely on semantic labels (e.g., filtering to only chemical entities or medical devices), GLiNER's label assignment should be treated as approximate. The most reliable labels appear to be those for well-defined ontological categories (Chemical, Anatomical Structure, Medical Device); the weakest are for abstract functional categories (Spatial Concept, Functional Concept) which GLiNER over-applies to non-conceptual terms.
