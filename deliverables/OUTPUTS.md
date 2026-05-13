@@ -121,7 +121,9 @@ High-frequency terms (`method`, `cell`, `protein`) are generic biomedical vocabu
 
 ### Visualization
 
-#### `visualizations/histogram_focal_terms_full.png`
+#### `visualizations/fullsample_visualizations/histogram_focal_terms_full.png`
+
+![Histogram of focal terms per patent](../visualizations/fullsample_visualizations/histogram_focal_terms_full.png)
 
 A histogram of the number of focal terms per patent (x-axis: number of focal terms, y-axis: number of patents). Dashed vertical lines mark the **mean (8.85)** and **median (6.0)**.
 
@@ -195,7 +197,9 @@ Bottom 20 pairs by cosine similarity. These cases have near-zero or negative sim
 
 ### Visualization
 
-#### `visualizations/task3_cosine_similarity_distribution_sample.png`
+#### `visualizations/fullsample_visualizations/task3_cosine_similarity_distribution_sample.png`
+
+![Cosine similarity distribution](../visualizations/fullsample_visualizations/task3_cosine_similarity_distribution_sample.png)
 
 A histogram of cosine similarity scores (x-axis: cosine similarity, y-axis: number of focal-term pairs). Dashed vertical lines mark the **mean (0.467)** and **median (0.477)**.
 
@@ -224,7 +228,7 @@ output/
 ├── task3_high_similarity_examples_sample.csv  # Task 3: top-20 similar pairs
 └── task3_low_similarity_examples_sample.csv   # Task 3: bottom-20 similar pairs
 
-visualizations/
+visualizations/fullsample_visualizations/
 ├── histogram_focal_terms_full.png        # Task 2: focal term count distribution
 └── task3_cosine_similarity_distribution_sample.png  # Task 3: similarity distribution
 ```
