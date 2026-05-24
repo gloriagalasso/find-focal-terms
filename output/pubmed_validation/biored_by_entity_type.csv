@@ -1,0 +1,7 @@
+entity_type,exact,missed,partial,total,recall
+CellLine,0,17,0,17,0.0
+ChemicalEntity,66,40,30,136,0.7058823529411765
+DiseaseOrPhenotypicFeature,66,48,97,211,0.7725118483412322
+GeneOrGeneProduct,28,152,76,256,0.40625
+OrganismTaxon,28,43,14,85,0.49411764705882355
+SequenceVariant,2,39,22,63,0.38095238095238093
