@@ -104,6 +104,36 @@
 
 ---
 
+## PubMed Validation — GLiNER vs. NER Benchmarks
+
+**Goal:** Evaluate how well GLiNER extracts biomedical entity mentions from PubMed abstracts, by matching GLiNER-extracted terms against three established NER benchmark datasets (BC5CDR, BioRED, NCBI Disease) on shared PMIDs. No human annotation required — ground truth comes from the benchmarks.
+
+**Steps:**
+
+1. **Parse benchmarks** from PubTator format into `{pmid: [(mention, entity_type), ...]}` dictionaries. All three benchmarks (BC5CDR: 1500 PMIDs, BioRED: 600 PMIDs, NCBI Disease: 793 PMIDs) were parsed.
+
+2. **Find overlapping PMIDs** by intersecting each benchmark's PMID set with the 881,341 GLiNER PMIDs. Only overlapping articles can be compared. NCBI Disease had 0 overlap (its PMIDs cover pre-2000 articles barely represented in the GLiNER sample).
+
+3. **Filter GLiNER data** to the ~90 overlapping PMIDs before groupby, reducing 207M rows to ~21,000 for efficiency.
+
+4. **Match terms** using exact match (GLiNER term == GT mention) and partial match (one is a substring of the other), then compute precision, recall, and F1 at both micro and macro level.
+
+**Key results:**
+
+| Benchmark | Overlap PMIDs | Micro Precision | Micro Recall | Micro F1 |
+|-----------|--------------|-----------------|--------------|----------|
+| BC5CDR | 46 | 0.204 | 0.782 | 0.323 |
+| BioRED | 48 | 0.203 | 0.559 | 0.297 |
+| NCBI Disease | 0 | — | — | — |
+
+BioRED recall by entity type: Disease (0.77) > Chemical (0.71) > Organism (0.49) > Gene (0.41) > Variant (0.38) > CellLine (0.00).
+
+**Main findings:** Recall is lower than for patents (0.78/0.56 vs. 0.99) because biomedical entity names are longer multi-word phrases that GLiNER fragments into single tokens. Precision is similarly low (~0.20) due to generic noise terms. Cell lines are never captured (recall = 0.00). The pattern is consistent with the patent validation: GLiNER is a high-extraction, noisy first-pass tagger that benefits from downstream filtering.
+
+**Output:** `deliverables/pubmed_validation_deliverable.md`, `output/pubmed_validation/` (4 CSVs), `visualizations/pubmed_validation/` (4 plots).
+
+---
+
 ## Validation Task — GLiNER Claim-Level Evaluation
 
 **Goal:** Evaluate how well GLiNER extracts meaningful scientific and technical terms from patent claims, and how accurately it assigns semantic labels. This is not strict biomedical NER evaluation — the aim is to assess whether GLiNER identifies the "idea terms" that matter for the focal-term pipeline.
