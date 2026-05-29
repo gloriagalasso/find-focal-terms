@@ -1,0 +1,90 @@
+name: Run Focal Terms Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode: test (50k rows sample) or full (all data)"
+        required: true
+        default: "test"
+        type: choice
+        options:
+          - test
+          - full
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      POLARS_MAX_THREADS: "4"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install \
+            polars pyarrow pandas numpy matplotlib scipy scikit-learn \
+            sentence-transformers
+
+      - name: Create directories
+        run: mkdir -p data output visualizations
+
+      - name: Download parquet files from public share
+        run: |
+          BASE_URL="https://bwsyncandshare.kit.edu/s/TgyTgtxLedq3wF5/download?path=%2F&files"
+          curl -L --fail -o data/FullSampleGloria_Pat_GlinerLabels_16042026.parquet \
+            "${BASE_URL}=FullSampleGloria_Pat_GlinerLabels_16042026.parquet"
+          curl -L --fail -o data/FullSampleGloria_Link_PmidOa_16042026.parquet \
+            "${BASE_URL}=FullSampleGloria_Link_PmidOa_16042026.parquet"
+          curl -L --fail -o data/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet \
+            "${BASE_URL}=FullSampleGloria_Pmed_GlinerLabels_16042026.parquet"
+          echo "Downloaded files:"
+          ls -lh data/*.parquet
+
+      - name: Sample data (test mode only)
+        if: ${{ github.event.inputs.mode == 'test' }}
+        run: |
+          python - <<'EOF'
+          import polars as pl
+          from pathlib import Path
+          SAMPLE_ROWS = 50_000
+          data_dir = Path("data")
+          files = [
+              'FullSampleGloria_Pat_GlinerLabels_16042026.parquet',
+              'FullSampleGloria_Link_PmidOa_16042026.parquet',
+              'FullSampleGloria_Pmed_GlinerLabels_16042026.parquet',
+          ]
+          for fname in files:
+              path = data_dir / fname
+              df = pl.read_parquet(path, n_rows=SAMPLE_ROWS)
+              df.write_parquet(path)
+              print(f"Sampled {fname}: {df.shape[0]:,} rows")
+          EOF
+
+      - name: Run 01 - Focal Terms
+        run: python full-notebook/01_focal_terms.py
+
+      - name: Run 02 - Analysis
+        run: python full-notebook/02_analysis.py
+
+      - name: Run 03 - Semantic Similarity
+        run: python full-notebook/03_semantic.py
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-results-${{ github.event.inputs.mode }}
+          path: |
+            output/
+            visualizations/
