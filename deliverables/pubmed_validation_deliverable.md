@@ -1,7 +1,7 @@
 # PubMed GLiNER Validation Against NER Benchmarks — Deliverable
 
 **Notebook:** `notebooks/pubmed_validation.ipynb`
-**Date:** 2026-05-24
+**Date:** 2026-05-29
 **Author:** Gloria Galasso
 
 ---
@@ -21,7 +21,13 @@ This validation task evaluates how well **GLiNER** extracts biomedical entity me
 | BioRED | `data/BioRED/BioRED/` | 6 entity types (chemicals, diseases, genes, variants, organisms, cell lines); 600 PMIDs |
 | NCBI Disease | `data/NCBIdisease/` | Disease name recognition; 793 PMIDs |
 
-BioRED was downloaded from `https://ftp.ncbi.nlm.nih.gov/pub/lu/BioRED/BIORED.zip`. NCBI Disease was downloaded from `https://www.ncbi.nlm.nih.gov/CBBresearch/Dogan/DISEASE/`. All three benchmarks are in PubTator format.
+All three benchmarks are distributed in **PubTator format**:
+```
+PMID|t|Title text
+PMID|a|Abstract text
+PMID\tstart\tend\tmention\ttype\tconcept_id
+```
+The term we extract is the **mention** (column 4), lowercased and stripped. Character offsets and concept IDs are ignored.
 
 ---
 
@@ -29,11 +35,11 @@ BioRED was downloaded from `https://ftp.ncbi.nlm.nih.gov/pub/lu/BioRED/BIORED.zi
 
 ### Step 1 — Parse benchmark datasets
 
-All three benchmark datasets were parsed from PubTator format into a dictionary `{pmid: [(mention, entity_type), ...]}`. Only the entity mention (column 4) and entity type (column 5) were extracted; character offsets were ignored. Mentions were lowercased and stripped of whitespace.
+All three benchmark datasets were parsed from PubTator format into a dictionary `{pmid: [(mention, entity_type), ...]}`. Mentions were lowercased and stripped of whitespace. Each benchmark's PMID set was stored separately.
 
 ### Step 2 — Find overlapping PMIDs
 
-The set of GLiNER PMIDs was intersected with each benchmark's PMIDs separately. This identified the articles present in both datasets — the only articles where a comparison is possible.
+The set of GLiNER PMIDs was intersected with each benchmark's PMID set. Only overlapping articles can be compared.
 
 | Benchmark | Benchmark PMIDs | Overlapping with GLiNER | Overlap % |
 |-----------|----------------|------------------------|-----------|
@@ -45,14 +51,16 @@ The NCBI Disease corpus could not be evaluated: its PMIDs cover very old article
 
 ### Step 3 — Filter GLiNER data
 
-The 207M-row GLiNER file was loaded and immediately filtered to only the ~90 overlapping PMIDs (yielding ~21,000 rows), before building the `{pmid: set(terms)}` dictionary. This avoids running an expensive groupby on the full dataset.
+The 207M-row GLiNER file was loaded and immediately filtered to only the ~90 overlapping PMIDs (yielding ~21,000 rows) before building the `{pmid: set(terms)}` dictionary. This avoids running an expensive groupby on the full dataset.
 
 ### Step 4 — Match GLiNER terms against ground truth
 
-For each overlapping PMID, GLiNER terms were compared against the deduplicated ground truth mentions using two criteria:
+For each overlapping PMID, GLiNER terms were compared against the deduplicated ground-truth mentions using two criteria:
 
 - **Exact match**: the GT mention equals a GLiNER term (e.g. GT `"headache"` = GLiNER `"headache"`)
-- **Partial match**: a GLiNER term is a substring of the GT mention, or vice versa (e.g. GT `"nitric oxide"` partially matched by GLiNER `"nitric"`)
+- **Partial match**: a GLiNER term appears as whole words inside the GT mention, or vice versa (e.g. GT `"hepatocyte nuclear factor-6"` partially matched by GLiNER `"hnf-6"`)
+
+Partial matching uses **word-boundary lookarounds** (`(?<!\w)...(?!\w)`) rather than a bare Python `in` check. This avoids character-collision false positives where short noise tokens (e.g. `"no"`) inadvertently match as substrings inside unrelated words (e.g. `"ade`**no**`mas"`, `"col`**or**`ectal"`). Standard `\b` word boundaries were not used because they fail for chemical names ending in non-word characters such as parentheses (e.g. `"znso(4)"`), where no word/non-word transition exists.
 
 ### Step 5 — Compute metrics
 
@@ -114,33 +122,76 @@ For each PMID and then aggregated across all PMIDs:
 
 ---
 
-## 5. Findings
+## 5. Visualizations
 
-### Finding 1 — Recall is lower than in the patent validation
+### Figure 1 — Micro metrics and match distribution
 
-GLiNER achieved recall of 0.782 (BC5CDR) and 0.559 (BioRED), compared to 0.99 on patent claims. The difference comes from the nature of the entities: biomedical entity names are longer, multi-word phrases (e.g. *glyceryl trinitrate*, *tension-type headache*, *VEGF receptor*), while patent claim terms tend to be shorter and more standalone. GLiNER fragments multi-word biomedical entities into single-word tokens that only partially cover the ground truth span.
+![Metrics and match distribution](../visualizations/pubmed_validation/metrics_and_match_distribution.png)
 
-### Finding 2 — Precision is similarly low (~0.20)
-
-Only about 20% of GLiNER terms match a benchmark entity. The remaining 80% are generic tokens — prepositions, numbers, and common words like *after*, *study*, *significantly* — that are not biomedical entities. This is consistent with the patent finding (precision = 0.27). A minimum term-length filter and a biomedical stop-list would substantially raise precision without harming recall.
-
-### Finding 3 — Partial matching is needed to get a fair recall estimate
-
-GLiNER tends to extract single words rather than full multi-word entity names. For example, the GT entity `"nitric oxide"` gets captured as just `"nitric"`. Without partial matching, recall would drop from 0.782 to roughly 0.44 for BC5CDR. Partial matching — counting a GT entity as found if at least one of its component words appears in GLiNER — gives a fairer picture of actual coverage.
-
-### Finding 4 — Recall varies strongly by entity type
-
-Diseases and chemicals are better covered (0.71–0.77) because their surface forms are shorter and more common. Genes, variants, and cell lines are poorly covered (0.00–0.41) because their names are highly specialised laboratory codes (e.g. *HeLa*, *MCF-7*, *rs12345*) or long compound identifiers that GLiNER never emits as single tokens.
-
-### Finding 5 — Top missed entities reveal systematic gaps
-
-**BC5CDR missed:** multi-token drug names (*glyceryl trinitrate*, *6-OHDA*, *cyproterone acetate*) and short abbreviations (*FA*, *GTN*, *TDP*, *CHF*) that GLiNER either fragments or ignores.
-
-**BioRED missed:** organism mentions (*patients*, *mice*, *rats*) — surprisingly absent from the GLiNER PubMed term set, suggesting they were filtered upstream as too generic by the pipeline. Also gene symbols (*VEGF*, *NF-κB*, *GLUT2*) and cell lines (*HEK293*, *HeLa*).
+Left: grouped bar chart comparing micro precision, recall, and F1 for BC5CDR and BioRED. Right: stacked bar showing how many GT mentions were matched exactly, partially, or missed per benchmark.
 
 ---
 
-## 6. Comparison with Patent Validation
+### Figure 2 — Per-document recall distribution
+
+![Per-PMID recall distribution](../visualizations/pubmed_validation/per_pmid_recall_distribution.png)
+
+Histogram of per-article recall scores for BC5CDR (left) and BioRED (right), with the mean recall marked. Shows the spread across individual articles rather than just the aggregate.
+
+---
+
+### Figure 3 — BioRED recall by entity type
+
+![BioRED recall by entity type](../visualizations/pubmed_validation/biored_recall_by_entity_type.png)
+
+Horizontal bar chart of recall per entity type in BioRED, sorted ascending. Diseases and chemicals are well covered; cell lines have zero recall.
+
+---
+
+### Figure 4 — Top missed entities
+
+![Top missed entities](../visualizations/pubmed_validation/top_missed_entities.png)
+
+Top 15 most frequently missed ground-truth mentions for BC5CDR (left) and BioRED (right), by number of articles they appear in but are not captured by GLiNER.
+
+---
+
+## 6. Findings
+
+### Finding 1 — High recall, low precision — consistent with patent validation
+
+On both benchmarks GLiNER exhibited a consistent high-recall / low-precision profile (precision ~0.20, recall 0.56–0.78). This is consistent with the patent validation result (precision 0.27, recall 0.99). The pattern holds across two independent domains and two evaluation methodologies, confirming that GLiNER is a broad, noisy first-pass extractor regardless of domain.
+
+### Finding 2 — Recall is lower than in the patent validation
+
+Recall on PubMed (0.56–0.78) is substantially lower than on patents (0.99). The difference is attributable to three factors: (1) biomedical entity names are longer and more compositional than patent claim terms; (2) BioRED includes entity types absent from the patent evaluation (cell lines, variants, gene symbols); (3) patent focal terms may have been curated in a way that aligns more closely with GLiNER's extraction vocabulary.
+
+### Finding 3 — Partial matching accounts for the majority of covered mentions
+
+Partial matches account for 44% of all matched GT mentions in BC5CDR (155/351) and 56% in BioRED (239/429). Without partial matching, recall would drop sharply:
+
+| Benchmark | Recall (exact + partial) | Recall (exact only) |
+|-----------|--------------------------|---------------------|
+| BC5CDR | 0.782 | 0.437 (196/449) |
+| BioRED | 0.559 | 0.247 (190/768) |
+
+This confirms that GLiNER systematically fragments multi-word entity names into single-word tokens. Partial matching is necessary to fairly assess coverage.
+
+### Finding 4 — Recall varies strongly by entity type
+
+Diseases and chemicals are well covered (0.71–0.77) because their surface forms are shorter and common. Genes and variants are poorly covered (0.38–0.41) because they appear as specialised symbols or long compound identifiers. Cell lines have zero recall (0/17): names such as *HeLa*, *MCF-7*, *HEK293* are highly specific laboratory codes that do not appear in the GLiNER output at all.
+
+### Finding 5 — Top missed entities reveal two distinct failure modes
+
+**BC5CDR missed:** multi-token drug names (*glyceryl trinitrate*, *6-OHDA*, *cyproterone acetate*) and short abbreviations (*FA*, *GTN*, *TDP*, *CHF*). These are failures of **lexical complexity** — entities that are too long to extract as a unit or too short/ambiguous to extract reliably.
+
+**BioRED missed:** organism mentions (*patients* ×13, *mice* ×8, *rats* ×5) — absent from the GLiNER output, suggesting upstream filtering removed them as too generic. Also gene symbols (*VEGF*, *NF-κB*, *GLUT2*) and cell lines (*HEK293*, *HeLa*). These are failures of **entity-type coverage** — categories that GLiNER never extracts regardless of surface form.
+
+These are structurally distinct failure modes that would require different remediation strategies.
+
+---
+
+## 7. Comparison with Patent Validation
 
 | Setting | Precision | Recall | F1 |
 |---------|-----------|--------|-----|
@@ -148,11 +199,19 @@ Diseases and chemicals are better covered (0.71–0.77) because their surface fo
 | BC5CDR benchmark (chemicals + diseases) | 0.20 | 0.78 | 0.32 |
 | BioRED benchmark (6 entity types) | 0.20 | 0.56 | 0.30 |
 
-The overall pattern is consistent across both domains: **GLiNER is a high-extraction, noisy first-pass tagger**. Precision is low in both settings because the pipeline does not filter generic tokens. Recall is high for patents but lower for PubMed because biomedical entity names are harder to capture as single tokens.
+The core pattern is consistent across both domains. Precision is slightly lower on PubMed (0.20 vs. 0.27), consistent with abstracts containing more generic scientific vocabulary that GLiNER incorrectly extracts as entities.
 
 ---
 
-## 7. Output Files
+## 8. Conclusions
+
+GLiNER functions as a **broad, noisy first-pass extractor**: it achieves high recall for common entity types (diseases, chemicals) but systematically misses specialised identifiers (cell lines, gene symbols, abbreviations), and produces low precision due to indiscriminate extraction of generic tokens. These properties are robust across two independent domains and two evaluation designs.
+
+For downstream use in focal-term extraction or literature mining, these results support a **two-stage pipeline**: GLiNER for high-recall candidate generation, followed by a precision-oriented filtering step — for example, a minimum term-length threshold, a biomedical stop-word list, or entity-type confidence filtering — to remove noise before terms are used for indexing or matching.
+
+---
+
+## 9. Output Files
 
 | File | Location | Description |
 |------|----------|-------------|
