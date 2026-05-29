@@ -1,0 +1,36 @@
+name: 02 – Analysis
+# Requires 01 to have run first (reads output/focal_terms_full.parquet from repo)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode (label only — reads whatever 01 last produced)"
+        required: true
+        default: "test"
+        type: choice
+        options:
+          - test
+          - full
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install polars pyarrow numpy matplotlib
+
+      - name: Create directories
+        run: mkdir -p output visualizations
+
+      - name: Run 02_analysis.py
+        run: python full-notebook/02_analysis.py

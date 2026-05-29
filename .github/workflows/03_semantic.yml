@@ -1,10 +1,11 @@
-name: Run Focal Terms Pipeline
+name: 03 – Semantic Similarity
+# Requires 01 to have run first (reads output/focal_terms_full.parquet from repo)
 
 on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "Run mode: test (50k rows sample) or full (all data)"
+        description: "Run mode (label only — reads whatever 01 last produced)"
         required: true
         default: "test"
         type: choice
@@ -13,19 +14,16 @@ on:
           - full
 
 jobs:
-  run-pipeline:
+  run:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-
     env:
       POLARS_MAX_THREADS: "4"
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
@@ -33,63 +31,37 @@ jobs:
       - name: Install dependencies
         run: |
           pip install \
-            polars pyarrow pandas numpy matplotlib scipy scikit-learn \
+            polars pyarrow numpy matplotlib scipy scikit-learn \
             sentence-transformers
 
       - name: Create directories
-        run: mkdir -p data output visualizations
+        run: mkdir -p data output visualizations public
 
-      - name: Download parquet files from public share
+      - name: Download parquet files (needed by 03_semantic.py)
         run: |
-          BASE_URL="https://bwsyncandshare.kit.edu/s/TgyTgtxLedq3wF5/download?path=%2F&files"
-          curl -L --fail -o data/FullSampleGloria_Pat_GlinerLabels_16042026.parquet \
-            "${BASE_URL}=FullSampleGloria_Pat_GlinerLabels_16042026.parquet"
-          curl -L --fail -o data/FullSampleGloria_Link_PmidOa_16042026.parquet \
-            "${BASE_URL}=FullSampleGloria_Link_PmidOa_16042026.parquet"
-          curl -L --fail -o data/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet \
-            "${BASE_URL}=FullSampleGloria_Pmed_GlinerLabels_16042026.parquet"
-          echo "Downloaded files:"
-          ls -lh data/*.parquet
+          WEBDAV="https://bwsyncandshare.kit.edu/public.php/webdav"
+          TOKEN="TgyTgtxLedq3wF5"
+          curl -L --fail -u "${TOKEN}:" \
+            -o data/FullSampleGloria_Pat_GlinerLabels_16042026.parquet \
+            "${WEBDAV}/FullSampleGloria_Pat_GlinerLabels_16042026.parquet"
+          curl -L --fail -u "${TOKEN}:" \
+            -o data/FullSampleGloria_Link_PmidOa_16042026.parquet \
+            "${WEBDAV}/FullSampleGloria_Link_PmidOa_16042026.parquet"
+          curl -L --fail -u "${TOKEN}:" \
+            -o data/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet \
+            "${WEBDAV}/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet"
 
-      - name: Sample data (test mode only)
-        if: ${{ github.event.inputs.mode == 'test' }}
-        run: |
-          python - <<'EOF'
-          import polars as pl
-          from pathlib import Path
-          SAMPLE_ROWS = 50_000
-          data_dir = Path("data")
-          files = [
-              'FullSampleGloria_Pat_GlinerLabels_16042026.parquet',
-              'FullSampleGloria_Link_PmidOa_16042026.parquet',
-              'FullSampleGloria_Pmed_GlinerLabels_16042026.parquet',
-          ]
-          for fname in files:
-              path = data_dir / fname
-              df = pl.read_parquet(path, n_rows=SAMPLE_ROWS)
-              df.write_parquet(path)
-              print(f"Sampled {fname}: {df.shape[0]:,} rows")
-          EOF
-
-      - name: Run 01 - Focal Terms
-        run: python full-notebook/01_focal_terms.py
-
-      - name: Run 02 - Analysis
-        run: python full-notebook/02_analysis.py
-
-      - name: Run 03 - Semantic Similarity
+      - name: Run 03_semantic.py
         run: python full-notebook/03_semantic.py
 
       - name: Export viewer_data.json
         run: |
-          mkdir -p public
           python - <<'EOF'
           import polars as pl, json, numpy as np
           from pathlib import Path
 
           out_dir = Path("output")
 
-          # ── Task 1/2: focal terms ──────────────────────────────────────────
           focal = pl.read_parquet(out_dir / "focal_terms_full.parquet")
 
           per_patent = focal.group_by("patent_id").agg(
@@ -120,18 +92,17 @@ jobs:
               if r["n"] <= 50
           ]
 
-          # ── Task 3: semantic similarity ────────────────────────────────────
           sim_path = out_dir / "task3_cosine_similarity_sample.parquet"
           similarity = {}
           if sim_path.exists():
               sim = pl.read_parquet(sim_path)
               vals = sim["cosine_similarity"].to_numpy()
               similarity = {
-                  "mean":   round(float(vals.mean()), 4),
-                  "median": round(float(np.median(vals)), 4),
-                  "std":    round(float(vals.std()), 4),
-                  "min":    round(float(vals.min()), 4),
-                  "max":    round(float(vals.max()), 4),
+                  "mean":    round(float(vals.mean()), 4),
+                  "median":  round(float(np.median(vals)), 4),
+                  "std":     round(float(vals.std()), 4),
+                  "min":     round(float(vals.min()), 4),
+                  "max":     round(float(vals.max()), 4),
                   "n_pairs": int(len(vals)),
                   "high_examples": (
                       sim.sort("cosine_similarity", descending=True)
@@ -159,7 +130,7 @@ jobs:
           print(f"viewer_data.json written ({out_path.stat().st_size / 1024:.1f} KB)")
           EOF
 
-      - name: Commit and push viewer_data.json
+      - name: Commit viewer_data.json to repo
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

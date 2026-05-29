@@ -1,0 +1,79 @@
+name: 01 – Focal Terms
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode: test (50k rows) or full (all data)"
+        required: true
+        default: "test"
+        type: choice
+        options:
+          - test
+          - full
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      POLARS_MAX_THREADS: "4"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install polars pyarrow
+
+      - name: Create directories
+        run: mkdir -p data output output/tmp_focal_batches
+
+      - name: Download parquet files
+        run: |
+          WEBDAV="https://bwsyncandshare.kit.edu/public.php/webdav"
+          TOKEN="TgyTgtxLedq3wF5"
+          curl -L --fail -u "${TOKEN}:" \
+            -o data/FullSampleGloria_Pat_GlinerLabels_16042026.parquet \
+            "${WEBDAV}/FullSampleGloria_Pat_GlinerLabels_16042026.parquet"
+          curl -L --fail -u "${TOKEN}:" \
+            -o data/FullSampleGloria_Link_PmidOa_16042026.parquet \
+            "${WEBDAV}/FullSampleGloria_Link_PmidOa_16042026.parquet"
+          curl -L --fail -u "${TOKEN}:" \
+            -o data/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet \
+            "${WEBDAV}/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet"
+          ls -lh data/*.parquet
+
+      - name: Sample data (test mode only)
+        if: ${{ github.event.inputs.mode == 'test' }}
+        run: |
+          python - <<'EOF'
+          import polars as pl
+          from pathlib import Path
+          SAMPLE_ROWS = 50_000
+          for fname in [
+              'FullSampleGloria_Pat_GlinerLabels_16042026.parquet',
+              'FullSampleGloria_Link_PmidOa_16042026.parquet',
+              'FullSampleGloria_Pmed_GlinerLabels_16042026.parquet',
+          ]:
+              path = Path("data") / fname
+              df = pl.read_parquet(path, n_rows=SAMPLE_ROWS)
+              df.write_parquet(path)
+              print(f"Sampled {fname}: {df.shape[0]:,} rows")
+          EOF
+
+      - name: Run 01_focal_terms.py
+        run: python full-notebook/01_focal_terms.py
+
+      - name: Commit focal_terms_full.parquet to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add output/focal_terms_full.parquet
+          git commit -m "ci: focal_terms_full.parquet (${{ github.event.inputs.mode }} mode)" \
+            || echo "Nothing to commit"
+          git push
