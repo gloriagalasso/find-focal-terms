@@ -8,7 +8,7 @@
 
 ## 1. Objective
 
-This validation task evaluates how well **GLiNER** extracts biomedical entity mentions from PubMed abstracts, by comparing GLiNER-extracted terms against three established biomedical NER benchmark datasets. Unlike the patent-side validation, no human annotation was required — the benchmark datasets provide ground truth directly.
+This validation task evaluates how well **GLiNER** extracts biomedical entity mentions from PubMed abstracts, by comparing GLiNER-extracted terms against three established biomedical NER benchmark datasets. Unlike the patent-side validation, no human annotation was required. The benchmark datasets provide ground truth directly.
 
 ---
 
@@ -21,13 +21,26 @@ This validation task evaluates how well **GLiNER** extracts biomedical entity me
 | BioRED | `data/BioRED/BioRED/` | 6 entity types (chemicals, diseases, genes, variants, organisms, cell lines); 600 PMIDs |
 | NCBI Disease | `data/NCBIdisease/` | Disease name recognition; 793 PMIDs |
 
-All three benchmarks are distributed in **PubTator format**:
+All three benchmarks are distributed in **PubTator format**. Each document has title/abstract lines followed by tab-separated annotation lines:
+
 ```
 PMID|t|Title text
 PMID|a|Abstract text
-PMID\tstart\tend\tmention\ttype\tconcept_id
+PMID   start   end   mention   type   concept_id
 ```
-The term we extract is the **mention** (column 4), lowercased and stripped. Character offsets and concept IDs are ignored.
+
+The annotation line has 6 tab-separated fields (0-indexed):
+
+| Index | Field | Example |
+|-------|-------|---------|
+| 0 | PMID | `8701013` |
+| 1 | start offset | `0` |
+| 2 | end offset | `10` |
+| 3 | **mention** ← extracted | `Famotidine` |
+| 4 | entity type | `Chemical` |
+| 5 | concept ID | `MESH:D015738` |
+
+The term we extract is **`parts[3]`** (the mention), lowercased and stripped. Character offsets and concept IDs are ignored.
 
 ---
 
