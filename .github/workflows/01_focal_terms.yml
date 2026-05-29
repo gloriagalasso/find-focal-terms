@@ -16,6 +16,8 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    permissions:
+      contents: write
     env:
       POLARS_MAX_THREADS: "4"
 
