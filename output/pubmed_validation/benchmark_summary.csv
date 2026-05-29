@@ -1,4 +1,4 @@
 benchmark,overlapping_pmids,total_gt_mentions,exact_matches,partial_matches,missed,total_gliner_terms,gliner_terms_matched,micro_precision,micro_recall,micro_f1,macro_precision,macro_recall,macro_f1
-BC5CDR,46,449,196,155,98,2061,420,0.204,0.782,0.323,0.207,0.79,0.318
-BioRED,48,768,190,239,339,2304,467,0.203,0.559,0.297,0.228,0.552,0.309
+BC5CDR,46,449,196,136,117,2061,379,0.184,0.739,0.295,0.187,0.751,0.292
+BioRED,48,768,190,187,391,2304,424,0.184,0.491,0.268,0.208,0.488,0.28
 NCBI Disease,0,N/A,N/A,N/A,N/A,N/A,N/A,,,,,,
