@@ -31,25 +31,37 @@ jobs:
       - name: Install dependencies
         run: |
           pip install \
-            polars pyarrow numpy matplotlib scipy scikit-learn \
+            polars pyarrow boto3 numpy matplotlib scipy scikit-learn \
             sentence-transformers
 
       - name: Create directories
         run: mkdir -p data output visualizations public
 
-      - name: Download parquet files (needed by 03_semantic.py)
+      - name: Download parquet files from R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_ACCESS_SECRET }}
         run: |
-          WEBDAV="https://bwsyncandshare.kit.edu/public.php/webdav"
-          TOKEN="TgyTgtxLedq3wF5"
-          curl -L --fail -u "${TOKEN}:" \
-            -o data/FullSampleGloria_Pat_GlinerLabels_16042026.parquet \
-            "${WEBDAV}/FullSampleGloria_Pat_GlinerLabels_16042026.parquet"
-          curl -L --fail -u "${TOKEN}:" \
-            -o data/FullSampleGloria_Link_PmidOa_16042026.parquet \
-            "${WEBDAV}/FullSampleGloria_Link_PmidOa_16042026.parquet"
-          curl -L --fail -u "${TOKEN}:" \
-            -o data/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet \
-            "${WEBDAV}/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet"
+          python - <<'EOF'
+          import boto3, os
+          s3 = boto3.client(
+              's3',
+              endpoint_url='https://977a2b4bf497816f10a436148fcf51b9.r2.cloudflarestorage.com',
+              aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+              region_name='auto'
+          )
+          bucket = 'parquetunistuttgart'
+          files = {
+              'FullSampleGloria_Pat_GlinerLabels.parquet':           'data/FullSampleGloria_Pat_GlinerLabels_16042026.parquet',
+              'FullSampleGloria_Link_PmidOa.parquet':                'data/FullSampleGloria_Link_PmidOa_16042026.parquet',
+              'FullSampleGloria_Pmed_GlinerLabels_16042026.parquet': 'data/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet',
+          }
+          for r2_key, local_path in files.items():
+              print(f"Downloading {r2_key} -> {local_path}...")
+              s3.download_file(bucket, r2_key, local_path)
+              print(f"  saved ({os.path.getsize(local_path) / 1e6:.1f} MB)")
+          EOF
 
       - name: Run 03_semantic.py
         run: python full-notebook/03_semantic.py
