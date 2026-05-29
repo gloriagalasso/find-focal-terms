@@ -177,7 +177,9 @@ On both benchmarks GLiNER exhibited a consistent high-recall / low-precision pro
 
 ### Finding 2 — Recall is lower than in the patent validation
 
-Recall on PubMed (0.56–0.78) is substantially lower than on patents (0.99). The difference is attributable to three factors: (1) biomedical entity names are longer and more compositional than patent claim terms; (2) BioRED includes entity types absent from the patent evaluation (cell lines, variants, gene symbols); (3) patent focal terms may have been curated in a way that aligns more closely with GLiNER's extraction vocabulary.
+Recall on PubMed (0.49–0.74) is lower than on patents (0.99) due to two factors:
+1) Biomedical names are longer and more compositional (meaning GLiNER often divides a single concept into multiple words).
+2) BioRED contains highly specialized entities (cell lines, variants, gene symbols) absent from patent claims.
 
 ### Finding 3 — Partial matching accounts for the majority of covered mentions
 
