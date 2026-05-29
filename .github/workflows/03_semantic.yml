@@ -1,5 +1,5 @@
 name: 03 – Semantic Similarity
-# Requires 01 to have run first (reads output/focal_terms_full.parquet from repo)
+# Requires 01 to have run first (downloads focal_terms_full.parquet from R2)
 
 on:
   workflow_dispatch:
@@ -21,6 +21,7 @@ jobs:
       contents: write
     env:
       POLARS_MAX_THREADS: "4"
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +40,28 @@ jobs:
       - name: Create directories
         run: mkdir -p data output visualizations public
 
-      - name: Download parquet files from R2
+      - name: Download focal_terms_full.parquet from R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_ACCESS_SECRET }}
+        run: |
+          python - <<'EOF'
+          import boto3, os
+          s3 = boto3.client(
+              's3',
+              endpoint_url='https://977a2b4bf497816f10a436148fcf51b9.r2.cloudflarestorage.com',
+              aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+              region_name='auto'
+          )
+          key = f"results/focal_terms_full_${{ github.event.inputs.mode }}.parquet"
+          dest = 'output/focal_terms_full.parquet'
+          print(f"Downloading {key} -> {dest}...")
+          s3.download_file('parquetunistuttgart', key, dest)
+          print(f"  saved ({os.path.getsize(dest) / 1e6:.1f} MB)")
+          EOF
+
+      - name: Download raw parquet files from R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_ACCESS_SECRET }}

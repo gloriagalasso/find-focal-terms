@@ -16,10 +16,9 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    permissions:
-      contents: write
     env:
       POLARS_MAX_THREADS: "4"
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -33,7 +32,7 @@ jobs:
         run: pip install polars pyarrow boto3
 
       - name: Create directories
-        run: mkdir -p data output output/tmp_focal_batches
+        run: mkdir -p data output
 
       - name: Download parquet files from R2
         env:
@@ -83,11 +82,23 @@ jobs:
       - name: Run 01_focal_terms.py
         run: python full-notebook/01_focal_terms.py
 
-      - name: Commit focal_terms_full.parquet to repo
+      - name: Upload focal_terms_full.parquet to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_ACCESS_SECRET }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add output/focal_terms_full.parquet
-          git commit -m "ci: focal_terms_full.parquet (${{ github.event.inputs.mode }} mode)" \
-            || echo "Nothing to commit"
-          git push
+          python - <<'EOF'
+          import boto3, os
+          s3 = boto3.client(
+              's3',
+              endpoint_url='https://977a2b4bf497816f10a436148fcf51b9.r2.cloudflarestorage.com',
+              aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+              region_name='auto'
+          )
+          src = 'output/focal_terms_full.parquet'
+          key = f"results/focal_terms_full_${{ github.event.inputs.mode }}.parquet"
+          print(f"Uploading {src} -> {key} ({os.path.getsize(src) / 1e6:.1f} MB)...")
+          s3.upload_file(src, 'parquetunistuttgart', key)
+          print("Done.")
+          EOF
