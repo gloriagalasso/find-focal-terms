@@ -80,11 +80,90 @@ jobs:
       - name: Run 03 - Semantic Similarity
         run: python full-notebook/03_semantic.py
 
-      - name: Upload results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pipeline-results-${{ github.event.inputs.mode }}
-          path: |
-            output/
-            visualizations/
+      - name: Export viewer_data.json
+        run: |
+          mkdir -p public
+          python - <<'EOF'
+          import polars as pl, json, numpy as np
+          from pathlib import Path
+
+          out_dir = Path("output")
+
+          # ── Task 1/2: focal terms ──────────────────────────────────────────
+          focal = pl.read_parquet(out_dir / "focal_terms_full.parquet")
+
+          per_patent = focal.group_by("patent_id").agg(
+              pl.col("focal_term").n_unique().alias("n")
+          )
+          median_val = per_patent["n"].median()
+
+          summary = {
+              "total_focal_pairs":       int(len(focal)),
+              "unique_patents":          int(focal["patent_id"].n_unique()),
+              "unique_terms":            int(focal["focal_term"].n_unique()),
+              "median_terms_per_patent": int(median_val) if median_val is not None else 0,
+          }
+
+          top_terms = (
+              focal.group_by("focal_term")
+              .agg(pl.col("patent_id").n_unique().alias("patent_count"))
+              .sort("patent_count", descending=True)
+              .head(20)
+              .to_dicts()
+          )
+
+          vc = per_patent["n"].value_counts().sort("n")
+          count_col = "count" if "count" in vc.columns else "counts"
+          distribution = [
+              {"bin": int(r["n"]), "count": int(r[count_col])}
+              for r in vc.iter_rows(named=True)
+              if r["n"] <= 50
+          ]
+
+          # ── Task 3: semantic similarity ────────────────────────────────────
+          sim_path = out_dir / "task3_cosine_similarity_sample.parquet"
+          similarity = {}
+          if sim_path.exists():
+              sim = pl.read_parquet(sim_path)
+              vals = sim["cosine_similarity"].to_numpy()
+              similarity = {
+                  "mean":   round(float(vals.mean()), 4),
+                  "median": round(float(np.median(vals)), 4),
+                  "std":    round(float(vals.std()), 4),
+                  "min":    round(float(vals.min()), 4),
+                  "max":    round(float(vals.max()), 4),
+                  "n_pairs": int(len(vals)),
+                  "high_examples": (
+                      sim.sort("cosine_similarity", descending=True)
+                      .head(10)
+                      .select("patent_id", "focal_term", "cosine_similarity")
+                      .to_dicts()
+                  ),
+                  "low_examples": (
+                      sim.sort("cosine_similarity")
+                      .head(10)
+                      .select("patent_id", "focal_term", "cosine_similarity")
+                      .to_dicts()
+                  ),
+              }
+
+          payload = {
+              "summary":      summary,
+              "top_terms":    top_terms,
+              "distribution": distribution,
+              "similarity":   similarity,
+          }
+
+          out_path = Path("public/viewer_data.json")
+          out_path.write_text(json.dumps(payload, indent=2))
+          print(f"viewer_data.json written ({out_path.stat().st_size / 1024:.1f} KB)")
+          EOF
+
+      - name: Commit and push viewer_data.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/viewer_data.json
+          git commit -m "ci: update viewer_data.json (${{ github.event.inputs.mode }} mode)" \
+            || echo "Nothing to commit"
+          git push
