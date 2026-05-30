@@ -82,6 +82,8 @@ pmed_terms = (
     .select([pl.col("pmid").cast(pl.Int64), "term"])
     .filter(pl.col("term").is_not_null())
     .join(pmed_df.lazy(), on="pmid", how="inner")
+    .group_by(["pmid", "term"])
+    .agg(pl.len().alias("freq_in_paper"))
     .collect()
 )
 
