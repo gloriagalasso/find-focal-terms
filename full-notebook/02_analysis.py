@@ -1,12 +1,29 @@
+import json
 import polars as pl
 import numpy as np
 from pathlib import Path
+import matplotlib.pyplot as plt
 
-BASE = Path(__file__).parent
+# =========================
+# CONFIGURATION
+# =========================
+BASE    = Path(__file__).parent
 OUT_DIR = BASE.parent / "output"
+VIZ_DIR = BASE.parent / "visualizations"
 
 FOCAL_PATH = OUT_DIR / "focal_terms_full.parquet"
 
+VIZ_DIR.mkdir(parents=True, exist_ok=True)
+
+print("=== TASK 2: Focal Terms Analysis ===\n")
+
+# =========================
+# STEP 1: Load focal terms and compute per-patent statistics
+# =========================
+print("Step 1: Computing focal terms per patent...")
+
+# For each patent, count how many unique focal terms it has.
+# A patent with many focal terms has broader overlap with cited papers.
 counts = (
     pl.scan_parquet(FOCAL_PATH)
     .group_by("patent_id")
@@ -16,6 +33,13 @@ counts = (
 )
 
 values = counts["num_focal_terms"].to_numpy()
+print(f"  Computed for {len(counts):,} patents")
+print(f"  Range: {int(values.min())} to {int(values.max())} focal terms per patent\n")
+
+# =========================
+# STEP 2: Compute summary statistics
+# =========================
+print("Step 2: Computing summary statistics...")
 
 summary = pl.DataFrame({
     "statistic": ["mean", "median", "std", "min", "max", "n_patents", "n_exactly_1", "pct_exactly_1"],
@@ -31,20 +55,19 @@ summary = pl.DataFrame({
     ],
 })
 
-counts.write_csv(OUT_DIR / "focal_term_counts_per_patent_full.csv")
-summary.write_csv(OUT_DIR / "task2_summary_stats_full.csv")
+counts.write_parquet(OUT_DIR / "focal_term_counts_per_patent_full.parquet")
 
 print(summary)
+print()
 
-import matplotlib.pyplot as plt
+# =========================
+# STEP 3: Visualize distribution
+# =========================
+print("Step 3: Creating histogram of focal terms per patent...")
 
-# Create visualizations folder
-VIZ_DIR = BASE.parent / "visualizations"
-VIZ_DIR.mkdir(parents=True, exist_ok=True)
-
-# Histogram
 plt.figure(figsize=(10, 6))
 
+# Use bins from min to max, capped at 200 for readability
 bins = range(
     int(values.min()),
     min(int(values.max()) + 2, 200)
@@ -54,30 +77,30 @@ plt.hist(
     values,
     bins=bins,
     edgecolor="black",
+    color="steelblue",
+    alpha=0.7,
 )
 
-plt.axvline(values.mean(), linestyle="--", label=f"Mean = {values.mean():.2f}")
-plt.axvline(np.median(values), linestyle="--", label=f"Median = {np.median(values):.2f}")
+# Add lines for mean and median
+plt.axvline(values.mean(), linestyle="--", linewidth=2, color="red", label=f"Mean = {values.mean():.2f}")
+plt.axvline(np.median(values), linestyle="--", linewidth=2, color="orange", label=f"Median = {np.median(values):.2f}")
 
-plt.title("Distribution of Focal Terms per Patent")
-plt.xlabel("Number of Focal Terms")
-plt.ylabel("Number of Patents")
+plt.title("Distribution of Focal Terms per Patent", fontsize=14, fontweight="bold")
+plt.xlabel("Number of Focal Terms", fontsize=12)
+plt.ylabel("Number of Patents", fontsize=12)
 plt.legend()
-
+plt.grid(axis="y", alpha=0.3)
 plt.tight_layout()
 
-plt.savefig(
-    VIZ_DIR / "histogram_focal_terms_full.png",
-    dpi=300,
-)
-
+plt.savefig(VIZ_DIR / "histogram_focal_terms_full.png", dpi=300)
 plt.close()
 
-print(f"Saved histogram to {VIZ_DIR}")
+print(f"  Saved: {VIZ_DIR / 'histogram_focal_terms_full.png'}\n")
 
-# ─────────────────────────────────────────────
-# Example patents with strongest overlap
-# ─────────────────────────────────────────────
+# =========================
+# STEP 4: Find patents with strongest overlap
+# =========================
+print("Step 4: Identifying top 10 patents by focal-term overlap...")
 
 top_examples = (
     counts
@@ -85,17 +108,18 @@ top_examples = (
     .head(10)
 )
 
-top_examples.write_csv(
-    OUT_DIR / "task2_top_patent_examples_full.csv"
-)
 
-print("\nTop 10 patents by focal-term overlap:")
+print("Top 10 patents by focal-term overlap:")
 print(top_examples)
+print()
 
-# ─────────────────────────────────────────────
-# Most and least frequent focal terms
-# ─────────────────────────────────────────────
+# =========================
+# STEP 5: Analyze focal term frequencies
+# =========================
+print("Step 5: Computing focal term frequencies...")
 
+# Count how many patents each focal term appears in.
+# A frequently appearing term has broad relevance across patents and papers.
 term_counts = (
     pl.scan_parquet(FOCAL_PATH)
     .group_by("focal_term")
@@ -115,16 +139,31 @@ least_used = (
     .head(20)
 )
 
-most_used.write_csv(
-    OUT_DIR / "most_used_focal_terms_full.csv"
-)
+term_counts.write_parquet(OUT_DIR / "term_frequency_full.parquet")
 
-least_used.write_csv(
-    OUT_DIR / "least_used_focal_terms_full.csv"
-)
-
-print("\nMost used focal terms:")
+print("Most frequent focal terms (top 20):")
 print(most_used)
+print()
 
-print("\nLeast used focal terms:")
+print("Least frequent focal terms (bottom 20):")
 print(least_used)
+print()
+
+# =========================
+# STEP 6: Export JSON summary
+# =========================
+print("Step 6: Exporting JSON summary...")
+
+summary_row = summary.to_dicts()
+json_path = OUT_DIR / "task2_analysis.json"
+json_path.write_text(json.dumps({
+    "summary_stats":   {r["statistic"]: r["value"] for r in summary_row},
+    "top_10_patents":  top_examples.to_dicts(),
+    "most_used_terms": most_used.to_dicts(),
+    "least_used_terms": least_used.to_dicts(),
+}, indent=2))
+print(f"  JSON summary saved to: {json_path}\n")
+
+print("=" * 60)
+print("TASK 2 COMPLETE")
+print("=" * 60)

@@ -82,7 +82,7 @@ jobs:
       - name: Run 01_focal_terms.py
         run: python full-notebook/01_focal_terms.py
 
-      - name: Upload focal_terms_full.parquet to R2
+      - name: Upload outputs to R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_ACCESS_SECRET }}
@@ -96,9 +96,13 @@ jobs:
               aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
               region_name='auto'
           )
-          src = 'output/focal_terms_full.parquet'
-          key = f"results/focal_terms_full_${{ github.event.inputs.mode }}.parquet"
-          print(f"Uploading {src} -> {key} ({os.path.getsize(src) / 1e6:.1f} MB)...")
-          s3.upload_file(src, 'parquetunistuttgart', key)
-          print("Done.")
+          mode = '${{ github.event.inputs.mode }}'
+          files = {
+              'output/focal_terms_full.parquet': f'outcomes/01_focal_terms_{mode}.parquet',
+              'output/focal_terms_full.json':    f'outcomes/01_focal_terms_{mode}.json',
+          }
+          for src, key in files.items():
+              print(f"Uploading {src} -> {key} ({os.path.getsize(src) / 1e6:.2f} MB)...")
+              s3.upload_file(src, 'parquetunistuttgart', key)
+              print("  done.")
           EOF

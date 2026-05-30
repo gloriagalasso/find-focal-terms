@@ -17,8 +17,6 @@ jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    permissions:
-      contents: write
     env:
       POLARS_MAX_THREADS: "4"
       PYTHONUNBUFFERED: "1"
@@ -38,7 +36,7 @@ jobs:
             sentence-transformers
 
       - name: Create directories
-        run: mkdir -p data output visualizations public
+        run: mkdir -p data output visualizations
 
       - name: Download focal_terms_full.parquet from R2
         env:
@@ -54,7 +52,7 @@ jobs:
               aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
               region_name='auto'
           )
-          key = f"results/focal_terms_full_${{ github.event.inputs.mode }}.parquet"
+          key = f"outcomes/01_focal_terms_${{ github.event.inputs.mode }}.parquet"
           dest = 'output/focal_terms_full.parquet'
           print(f"Downloading {key} -> {dest}...")
           s3.download_file('parquetunistuttgart', key, dest)
@@ -161,16 +159,37 @@ jobs:
               "similarity":   similarity,
           }
 
-          out_path = Path("public/viewer_data.json")
+          out_path = out_dir / "viewer_data.json"
           out_path.write_text(json.dumps(payload, indent=2))
           print(f"viewer_data.json written ({out_path.stat().st_size / 1024:.1f} KB)")
           EOF
 
-      - name: Commit viewer_data.json to repo
+      - name: Upload outputs to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_ACCESS_SECRET }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add public/viewer_data.json
-          git commit -m "ci: update viewer_data.json (${{ github.event.inputs.mode }} mode)" \
-            || echo "Nothing to commit"
-          git push
+          python - <<'EOF'
+          import boto3, os
+          s3 = boto3.client(
+              's3',
+              endpoint_url='https://977a2b4bf497816f10a436148fcf51b9.r2.cloudflarestorage.com',
+              aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+              region_name='auto'
+          )
+          mode = '${{ github.event.inputs.mode }}'
+          files = {
+              'output/task3_contexts_sample.parquet':          f'outcomes/03_contexts_{mode}.parquet',
+              'output/task3_cosine_similarity_sample.parquet': f'outcomes/03_similarity_{mode}.parquet',
+              'output/task3_semantic_summary.json':            f'outcomes/03_semantic_summary_{mode}.json',
+              'output/viewer_data.json':                       f'outcomes/viewer_data_{mode}.json',
+          }
+          for src, key in files.items():
+              if not os.path.exists(src):
+                  print(f"Skipping {src} (not found)")
+                  continue
+              print(f"Uploading {src} -> {key} ({os.path.getsize(src) / 1e6:.2f} MB)...")
+              s3.upload_file(src, 'parquetunistuttgart', key)
+              print("  done.")
+          EOF

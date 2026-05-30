@@ -48,7 +48,7 @@ jobs:
               aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
               region_name='auto'
           )
-          key = f"results/focal_terms_full_${{ github.event.inputs.mode }}.parquet"
+          key = f"outcomes/01_focal_terms_${{ github.event.inputs.mode }}.parquet"
           dest = 'output/focal_terms_full.parquet'
           print(f"Downloading {key} -> {dest}...")
           s3.download_file('parquetunistuttgart', key, dest)
@@ -57,3 +57,29 @@ jobs:
 
       - name: Run 02_analysis.py
         run: python full-notebook/02_analysis.py
+
+      - name: Upload outputs to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_ACCESS_SECRET }}
+        run: |
+          python - <<'EOF'
+          import boto3, os
+          s3 = boto3.client(
+              's3',
+              endpoint_url='https://977a2b4bf497816f10a436148fcf51b9.r2.cloudflarestorage.com',
+              aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
+              region_name='auto'
+          )
+          mode = '${{ github.event.inputs.mode }}'
+          files = {
+              'output/focal_term_counts_per_patent_full.parquet': f'outcomes/02_focal_term_counts_{mode}.parquet',
+              'output/term_frequency_full.parquet':               f'outcomes/02_term_frequency_{mode}.parquet',
+              'output/task2_analysis.json':                       f'outcomes/02_analysis_{mode}.json',
+          }
+          for src, key in files.items():
+              print(f"Uploading {src} -> {key} ({os.path.getsize(src) / 1e6:.2f} MB)...")
+              s3.upload_file(src, 'parquetunistuttgart', key)
+              print("  done.")
+          EOF

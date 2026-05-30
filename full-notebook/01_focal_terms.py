@@ -2,6 +2,7 @@ import os
 os.environ.setdefault("POLARS_MAX_THREADS", "4")
 
 import gc
+import json
 import time
 from pathlib import Path
 import polars as pl
@@ -239,6 +240,23 @@ stats = (
 
 print(stats)
 print(f"Done in {elapsed(t0)}")
+
+# =========================
+# STEP 5: Export JSON summary
+# =========================
+print("\nStep 5: Exporting JSON summary...")
+t0 = time.time()
+
+stats_row = stats.to_dicts()[0]
+json_path = OUT_DIR / "focal_terms_full.json"
+json_path.write_text(json.dumps({
+    "n_rows":        int(stats_row["n_rows"]),
+    "n_patents":     int(stats_row["n_patents"]),
+    "n_pmids":       int(stats_row["n_pmids"]),
+    "n_focal_terms": int(stats_row["n_focal_terms"]),
+}, indent=2))
+print(f"  JSON summary saved to: {json_path}")
+print(f"  Done in {elapsed(t0)}")
 
 print(f"\n{'='*60}")
 print(f"TASK 1 COMPLETE | Total time: {elapsed(t0_all)}")
