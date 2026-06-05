@@ -167,4 +167,4 @@ BioRED recall by entity type: OrganismTaxon (0.991) > GeneOrGeneProduct (0.990) 
 
 **Main findings:** GLiNER has near-perfect recall but low precision — it extracts ~3.7× more terms than humans. The 904 unmatched GLiNER terms are dominated by patent legal boilerplate (`wherein`, `method`, `claim`). Half of all matches are partial, reflecting a systematic span boundary problem. Label accuracy is low (0.34) but most confusions are between hierarchically adjacent categories (e.g. Organic Chemical ↔ Chemical).
 
-**Output:** `deliverables/validation_deliverable.md`, `visualizations/validation/validation_visualizations/` (4 plots), `output/validation/validation_outputs/` (2 CSVs), `data/annotation/` (evaluation tables).
+**Output:** `deliverables/patent_claim_validation_deliverable.md`, `visualizations/validation/validation_visualizations/` (4 plots), `output/validation/validation_outputs/` (2 CSVs), `data/annotation/` (evaluation tables).
