@@ -1,14 +1,14 @@
 # PubMed GLiNER Validation Against NER Benchmarks — Deliverable
 
-**Notebook:** `notebooks/pubmed_validation.ipynb`
-**Date:** 2026-05-29
+**Notebook:** `notebooks/validation/pubmed_validation.ipynb`
+**Date:** 2026-06-05
 **Author:** Gloria Galasso
 
 ---
 
 ## 1. Objective
 
-This validation task evaluates how well **GLiNER** extracts biomedical entity mentions from PubMed abstracts, by comparing GLiNER-extracted terms against three established biomedical NER benchmark datasets. Unlike the patent-side validation, no human annotation was required. The benchmark datasets provide ground truth directly.
+This validation task evaluates how well **GLiNER** extracts biomedical entity mentions from PubMed abstracts, by comparing GLiNER-extracted terms against three established biomedical NER benchmark datasets. Unlike the patent-side validation, no human annotation was required — the benchmark datasets provide ground truth directly.
 
 ---
 
@@ -16,12 +16,14 @@ This validation task evaluates how well **GLiNER** extracts biomedical entity me
 
 | Source | File / Location | Description |
 |--------|----------------|-------------|
-| GLiNER PubMed labels | `data/raw/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet` | 207M rows, one per (pmid, term); 881,341 unique PMIDs |
-| BC5CDR | `data/CDR_Data/CDR.Corpus.v010516/` | Chemical and disease mentions in PubMed abstracts; 1500 PMIDs |
-| BioRED | `data/BioRED/BioRED/` | 6 entity types (chemicals, diseases, genes, variants, organisms, cell lines); 600 PMIDs |
-| NCBI Disease | `data/NCBIdisease/` | Disease name recognition; 793 PMIDs |
+| GLiNER PubMed labels (benchmark-specific) | `data/raw/pubmed_validation/specialized_pubmed_samples_with_entities.json` | 3,487 entries; GLiNER labels run specifically on all benchmark PMIDs; sentence-level entity extractions with text, label, score, and character offsets |
+| BC5CDR | `data/benchmarks/bc5cdr/CDR.Corpus.v010516/` | Chemical and disease mentions in PubMed abstracts; 1,500 PMIDs |
+| BioRED | `data/benchmarks/biored/BioRED/` | 6 entity types (chemicals, diseases, genes, variants, organisms, cell lines); 600 PMIDs |
+| NCBI Disease | `data/benchmarks/ncbi_disease/` | Disease name recognition; 792 PMIDs |
 
-All three benchmarks are distributed in **PubTator format**. Each document has title/abstract lines followed by tab-separated annotation lines:
+**Note on data source:** An initial run used the random PubMed sample `data/raw/v3_16042026/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet` (207M rows, 881k PMIDs) and found only 3–8% PMID overlap with the benchmarks and 0% for NCBI Disease (pre-2000 articles). The analysis was re-run using the dedicated JSON above, which achieves 100% coverage across all three corpora.
+
+All three benchmarks are distributed in **PubTator format**:
 
 ```
 PMID|t|Title text
@@ -29,18 +31,24 @@ PMID|a|Abstract text
 PMID   start   end   mention   type   concept_id
 ```
 
-The annotation line has 6 tab-separated fields (0-indexed):
+The term extracted is `parts[3]` (the mention span), lowercased and stripped of whitespace.
 
-| Index | Field | Example |
-|-------|-------|---------|
-| 0 | PMID | `8701013` |
-| 1 | start offset | `0` |
-| 2 | end offset | `10` |
-| 3 | **mention** ← extracted | `Famotidine` |
-| 4 | entity type | `Chemical` |
-| 5 | concept ID | `MESH:D015738` |
+The JSON file has one entry per article with nested sentence-level entities:
 
-The term we extract is **`parts[3]`** (the mention), lowercased and stripped. Character offsets and concept IDs are ignored.
+```json
+{
+  "doc_id": "10491763",
+  "source": "BioRED",
+  "entities": [
+    {
+      "sentence_idx": 0,
+      "entities": [
+        {"text": "diabetes", "label": "Disease or Syndrome", "score": 0.834, "start": 82, "end": 90}
+      ]
+    }
+  ]
+}
+```
 
 ---
 
@@ -48,36 +56,30 @@ The term we extract is **`parts[3]`** (the mention), lowercased and stripped. Ch
 
 ### Step 1 — Parse benchmark datasets
 
-All three benchmark datasets were parsed from PubTator format into a dictionary `{pmid: [(mention, entity_type), ...]}`. Mentions were lowercased and stripped of whitespace. Each benchmark's PMID set was stored separately.
+All three benchmark datasets were parsed from PubTator format into `{pmid: [(mention, entity_type), ...]}` dictionaries. Mentions were lowercased and stripped of whitespace.
 
-### Step 2 — Find overlapping PMIDs
+### Step 2 — Load GLiNER labels from the dedicated JSON
 
-The set of GLiNER PMIDs was intersected with each benchmark's PMID set. Only overlapping articles can be compared.
+Each entry in the JSON represents one article. Entity texts were extracted from all sentences, lowercased, and collected into a set per PMID. For BioRED, some PMIDs appear across multiple splits (train/dev/test); terms from all splits were merged with set union.
+
+### Step 3 — PMID overlap
 
 | Benchmark | Benchmark PMIDs | Overlapping with GLiNER | Overlap % |
 |-----------|----------------|------------------------|-----------|
-| BC5CDR | 1500 | 46 | 3.1% |
-| BioRED | 600 | 48 | 8.0% |
-| NCBI Disease | 793 | 0 | 0.0% |
-
-The NCBI Disease corpus could not be evaluated: its PMIDs cover very old articles (PMID range 23,402–10,987,655, roughly pre-2000) that are almost absent from the GLiNER sample. Of the 881,341 GLiNER PMIDs, only 1,533 fall within that PMID range, and none coincide with the 792 specific NCBI Disease PMIDs.
-
-### Step 3 — Filter GLiNER data
-
-The 207M-row GLiNER file was loaded and immediately filtered to only the ~90 overlapping PMIDs (yielding ~21,000 rows) before building the `{pmid: set(terms)}` dictionary. This avoids running an expensive groupby on the full dataset.
+| BC5CDR | 1,500 | 1,500 | 100% |
+| BioRED | 600 | 600 | 100% |
+| NCBI Disease | 792 | 792 | 100% |
 
 ### Step 4 — Match GLiNER terms against ground truth
 
-For each overlapping PMID, GLiNER terms were compared against the deduplicated ground-truth mentions using two criteria:
+For each PMID, GLiNER terms were compared against deduplicated ground-truth mentions using two criteria:
 
-- **Exact match**: the GT mention equals a GLiNER term (e.g. GT `"headache"` = GLiNER `"headache"`)
-- **Partial match**: a GLiNER term appears as whole words inside the GT mention, or vice versa (e.g. GT `"hepatocyte nuclear factor-6"` partially matched by GLiNER `"hnf-6"`)
+- **Exact match**: GT mention equals a GLiNER term
+- **Partial match**: a GLiNER term appears as whole words inside the GT mention, or vice versa
 
-Partial matching uses **word-boundary lookarounds** (`(?<!\w)...(?!\w)`) rather than a bare Python `in` check. This avoids character-collision false positives where short noise tokens (e.g. `"no"`) inadvertently match as substrings inside unrelated words (e.g. `"ade`**no**`mas"`, `"col`**or**`ectal"`). Standard `\b` word boundaries were not used because they fail for chemical names ending in non-word characters such as parentheses (e.g. `"znso(4)"`), where no word/non-word transition exists.
+Partial matching uses **word-boundary lookarounds** (`(?<!\w)...(?!\w)`) rather than a bare `in` check, to avoid false positives where short noise tokens (e.g. `"no"`) match as substrings of unrelated words. Standard `\b` was not used because it fails for chemical names ending in non-word characters such as parentheses (e.g. `"znso(4)"`).
 
 ### Step 5 — Compute metrics
-
-For each PMID and then aggregated across all PMIDs:
 
 - **Recall** = fraction of GT mentions covered by GLiNER (exact or partial)
 - **Precision** = fraction of GLiNER terms that match at least one GT mention
@@ -88,50 +90,75 @@ For each PMID and then aggregated across all PMIDs:
 
 ## 4. Results
 
-### BC5CDR (46 overlapping PMIDs)
+### 4.1 BC5CDR (1,500 PMIDs)
 
 | Metric | Value |
 |--------|-------|
-| GT mentions (deduplicated) | 449 |
-| Exact matches | 196 |
-| Partial matches | 155 |
-| Missed | 98 |
-| GLiNER terms total | 2061 |
-| GLiNER terms matching ≥1 GT entity | 420 |
-| **Micro Precision** | **0.204** |
-| **Micro Recall** | **0.782** |
-| **Micro F1** | **0.323** |
-| Macro Precision | 0.207 |
-| Macro Recall | 0.790 |
-| Macro F1 | 0.318 |
+| GT mentions (deduplicated) | 12,614 |
+| Exact matches | 8,911 |
+| Partial matches | 3,513 |
+| Missed | 190 |
+| GLiNER terms total | 99,331 |
+| GLiNER terms matching ≥1 GT entity | 16,197 |
+| **Micro Precision** | **0.163** |
+| **Micro Recall** | **0.985** |
+| **Micro F1** | **0.280** |
+| Macro Precision | 0.178 |
+| Macro Recall | 0.986 |
+| Macro F1 | 0.293 |
 
-### BioRED (48 overlapping PMIDs)
+### 4.2 BioRED (600 PMIDs)
 
 | Metric | Value |
 |--------|-------|
-| GT mentions (deduplicated) | 768 |
-| Exact matches | 190 |
-| Partial matches | 239 |
-| Missed | 339 |
-| GLiNER terms total | 2304 |
-| GLiNER terms matching ≥1 GT entity | 467 |
-| **Micro Precision** | **0.203** |
-| **Micro Recall** | **0.559** |
-| **Micro F1** | **0.297** |
-| Macro Precision | 0.228 |
-| Macro Recall | 0.552 |
-| Macro F1 | 0.309 |
+| GT mentions (deduplicated) | 9,421 |
+| Exact matches | 6,587 |
+| Partial matches | 2,685 |
+| Missed | 149 |
+| GLiNER terms total | 49,367 |
+| GLiNER terms matching ≥1 GT entity | 11,841 |
+| **Micro Precision** | **0.240** |
+| **Micro Recall** | **0.984** |
+| **Micro F1** | **0.386** |
+| Macro Precision | 0.242 |
+| Macro Recall | 0.985 |
+| Macro F1 | 0.380 |
 
-### BioRED — Recall by Entity Type
+### 4.3 NCBI Disease (792 PMIDs)
+
+| Metric | Value |
+|--------|-------|
+| GT mentions (deduplicated) | 3,864 |
+| Exact matches | 1,810 |
+| Partial matches | 1,999 |
+| Missed | 55 |
+| GLiNER terms total | 52,115 |
+| GLiNER terms matching ≥1 GT entity | 5,455 |
+| **Micro Precision** | **0.105** |
+| **Micro Recall** | **0.986** |
+| **Micro F1** | **0.189** |
+| Macro Precision | 0.108 |
+| Macro Recall | 0.986 |
+| Macro F1 | 0.189 |
+
+### 4.4 BioRED — Recall by Entity Type
 
 | Entity Type | Exact | Partial | Missed | Total | Recall |
 |-------------|-------|---------|--------|-------|--------|
-| DiseaseOrPhenotypicFeature | 66 | 97 | 48 | 211 | 0.773 |
-| ChemicalEntity | 66 | 30 | 40 | 136 | 0.706 |
-| OrganismTaxon | 28 | 14 | 43 | 85 | 0.494 |
-| GeneOrGeneProduct | 28 | 76 | 152 | 256 | 0.406 |
-| SequenceVariant | 2 | 22 | 39 | 63 | 0.381 |
-| CellLine | 0 | 0 | 17 | 17 | 0.000 |
+| OrganismTaxon | 878 | 23 | 8 | 909 | **0.991** |
+| GeneOrGeneProduct | 2,357 | 676 | 31 | 3,064 | **0.990** |
+| ChemicalEntity | 1,296 | 299 | 21 | 1,616 | **0.987** |
+| DiseaseOrPhenotypicFeature | 1,592 | 1,164 | 57 | 2,813 | **0.980** |
+| SequenceVariant | 399 | 513 | 21 | 933 | **0.977** |
+| CellLine | 71 | 10 | 11 | 92 | **0.880** |
+
+### 4.5 Match Type Summary
+
+| Benchmark | Matched | Exact | Partial | Partial share | Exact-only recall |
+|-----------|---------|-------|---------|---------------|-------------------|
+| BC5CDR | 12,424 / 12,614 | 8,911 | 3,513 | 28% | 0.707 |
+| BioRED | 9,272 / 9,421 | 6,587 | 2,685 | 29% | 0.699 |
+| NCBI Disease | 3,809 / 3,864 | 1,810 | 1,999 | 52% | 0.468 |
 
 ---
 
@@ -139,90 +166,82 @@ For each PMID and then aggregated across all PMIDs:
 
 ### Figure 1 — Micro metrics and match distribution
 
-![Metrics and match distribution](../visualizations/pubmed_validation/metrics_and_match_distribution.png)
+![Metrics and match distribution](../visualizations/validation/pubmed_validation/metrics_and_match_distribution.png)
 
-Left: grouped bar chart comparing micro precision, recall, and F1 for BC5CDR and BioRED. Right: stacked bar showing how many GT mentions were matched exactly, partially, or missed per benchmark.
+Left: grouped bar chart comparing micro precision, recall, and F1 for all three benchmarks. Right: stacked bar showing how many GT mentions were matched exactly, partially, or missed per benchmark.
 
 ---
 
 ### Figure 2 — Per-document recall distribution
 
-![Per-PMID recall distribution](../visualizations/pubmed_validation/per_pmid_recall_distribution.png)
+![Per-PMID recall distribution](../visualizations/validation/pubmed_validation/per_pmid_recall_distribution.png)
 
-Histogram of per-article recall scores for BC5CDR (left) and BioRED (right), with the mean recall marked. Shows the spread across individual articles rather than just the aggregate.
+Histograms of per-article recall scores for BC5CDR, BioRED, and NCBI Disease, with mean recall marked. Shows the spread of performance across individual articles.
 
 ---
 
 ### Figure 3 — BioRED recall by entity type
 
-![BioRED recall by entity type](../visualizations/pubmed_validation/biored_recall_by_entity_type.png)
+![BioRED recall by entity type](../visualizations/validation/pubmed_validation/biored_recall_by_entity_type.png)
 
-Horizontal bar chart of recall per entity type in BioRED, sorted ascending. Diseases and chemicals are well covered; cell lines have zero recall.
+Horizontal bar chart of recall per entity type in BioRED, sorted ascending. All types ≥ 0.88 at full scale; cell lines remain the hardest.
 
 ---
 
 ### Figure 4 — Top missed entities
 
-![Top missed entities](../visualizations/pubmed_validation/top_missed_entities.png)
+![Top missed entities](../visualizations/validation/pubmed_validation/top_missed_entities.png)
 
-Top 15 most frequently missed ground-truth mentions for BC5CDR (left) and BioRED (right), by number of articles they appear in but are not captured by GLiNER.
+Top 15 most frequently missed ground-truth mentions for BC5CDR, BioRED, and NCBI Disease.
 
 ---
 
 ## 6. Findings
 
-### Finding 1 — High recall, low precision — consistent with patent validation
+### Finding 1 — Near-perfect recall across all three benchmarks
 
-On both benchmarks GLiNER exhibited a consistent high-recall / low-precision profile (precision ~0.20, recall 0.56–0.78). This is consistent with the patent validation result (precision 0.27, recall 0.99). The pattern holds across two independent domains and two evaluation methodologies, confirming that GLiNER is a broad, noisy first-pass extractor regardless of domain.
+GLiNER recovers ~98.5% of all ground-truth entity mentions across all three corpora (BC5CDR 0.985, BioRED 0.984, NCBI Disease 0.986). Fewer than 200 mentions per benchmark are missed entirely. This is consistent with the patent validation result (recall 0.99) and confirms that the high-recall pattern is stable across domains and evaluation methodologies.
 
-### Finding 2 — Recall is lower than in the patent validation
+### Finding 2 — Low precision, driven by entity-type scope mismatch
 
-Recall on PubMed (0.49–0.74) is lower than on patents (0.99) due to two factors:
-1) Biomedical names are longer and more compositional (meaning GLiNER often divides a single concept into multiple words).
-2) BioRED contains highly specialized entities (cell lines, variants, gene symbols) absent from patent claims.
+Precision ranges from 0.105 (NCBI Disease) to 0.240 (BioRED). GLiNER extracts terms across many entity types while each benchmark only annotates a specific subset, so the majority of GLiNER terms count as false positives by the benchmark's standard. NCBI Disease has the lowest precision because it is disease-only: all non-disease GLiNER terms are false positives by definition. BioRED has the highest precision because its six entity types overlap most closely with GLiNER's extraction vocabulary.
 
-### Finding 3 — Partial matching accounts for the majority of covered mentions
+### Finding 3 — Partial matching is essential, especially for NCBI Disease
 
-Partial matches account for 44% of all matched GT mentions in BC5CDR (155/351) and 56% in BioRED (239/429). Without partial matching, recall would drop sharply:
+Partial matches account for 28–52% of all matched mentions. NCBI Disease has the highest partial-match share (52%), because disease names in older biomedical literature tend to be long multi-word constructions (*"familial adenomatous polyposis"*, *"adenomatous polyposis coli"*) that GLiNER captures as a substring rather than the full span. Without partial matching, NCBI Disease recall would drop from 0.986 to 0.468.
 
-| Benchmark | Recall (exact + partial) | Recall (exact only) |
-|-----------|--------------------------|---------------------|
-| BC5CDR | 0.782 | 0.437 (196/449) |
-| BioRED | 0.559 | 0.247 (190/768) |
+### Finding 4 — BioRED entity-type recall is uniformly high at full scale
 
-This confirms that GLiNER systematically fragments multi-word entity names into single-word tokens. Partial matching is necessary to fairly assess coverage.
+At full coverage all six BioRED entity types achieve recall ≥ 0.88. In the earlier limited-overlap run, cell lines had recall = 0.00 (0/17 annotations). At full scale (92 annotations) they reach 0.880. The remaining gap for cell lines and sequence variants is attributable to long compound identifiers and rare abbreviations that GLiNER does not match even partially.
 
-### Finding 4 — Recall varies strongly by entity type
+### Finding 5 — Missed entities follow two distinct patterns
 
-Diseases and chemicals are well covered (0.71–0.77) because their surface forms are shorter and common. Genes and variants are poorly covered (0.38–0.41) because they appear as specialised symbols or long compound identifiers. Cell lines have zero recall (0/17): names such as *HeLa*, *MCF-7*, *HEK293* are highly specific laboratory codes that do not appear in the GLiNER output at all.
+**BC5CDR:** adjective forms of diseases (*"hypertensive"*, *"convulsive"*), multi-token drug names (*"glyceryl trinitrate"*, *"6-OHDA"*), and short ambiguous abbreviations (*"GTN"*, *"FA"*). These are **lexical complexity** failures.
 
-### Finding 5 — Top missed entities reveal two distinct failure modes
+**BioRED:** adjectival modifiers (*"inflammatory"*, *"dopaminergic"*), compound gene identifiers (*"signal transducer and activator of transcription 3"*), and rare abbreviations (*"SAE"*, *"CHAT"*). These are **span-boundary and coverage** failures.
 
-**BC5CDR missed:** multi-token drug names (*glyceryl trinitrate*, *6-OHDA*, *cyproterone acetate*) and short abbreviations (*FA*, *GTN*, *TDP*, *CHF*). These are failures of **lexical complexity** — entities that are too long to extract as a unit or too short/ambiguous to extract reliably.
-
-**BioRED missed:** organism mentions (*patients* ×13, *mice* ×8, *rats* ×5) — absent from the GLiNER output, suggesting upstream filtering removed them as too generic. Also gene symbols (*VEGF*, *NF-κB*, *GLUT2*) and cell lines (*HEK293*, *HeLa*). These are failures of **entity-type coverage** — categories that GLiNER never extracts regardless of surface form.
-
-These are structurally distinct failure modes that would require different remediation strategies.
+**NCBI Disease:** long disease names (*"adenomatous polyposis coli"* missed 8×, *"familial adenomatous polyposis"* missed 3×), adjective forms (*"hyperphenylalaninemic"*), and abbreviations (*"WT"*, *"PDB"*). Consistent with the NCBI corpus covering older literature with more formal multi-word disease naming conventions.
 
 ---
 
 ## 7. Comparison with Patent Validation
 
-| Setting | Precision | Recall | F1 |
-|---------|-----------|--------|-----|
+| Validation setting | Precision | Recall | F1 |
+|--------------------|-----------|--------|-----|
 | Patents (human annotation, claims only) | 0.27 | 0.99 | 0.42 |
-| BC5CDR benchmark (chemicals + diseases) | 0.20 | 0.78 | 0.32 |
-| BioRED benchmark (6 entity types) | 0.20 | 0.56 | 0.30 |
+| BC5CDR (chemicals + diseases, 1,500 PMIDs) | 0.163 | 0.985 | 0.280 |
+| BioRED (6 entity types, 600 PMIDs) | 0.240 | 0.984 | 0.386 |
+| NCBI Disease (diseases only, 792 PMIDs) | 0.105 | 0.986 | 0.189 |
 
-The core pattern is consistent across both domains. Precision is slightly lower on PubMed (0.20 vs. 0.27), consistent with abstracts containing more generic scientific vocabulary that GLiNER incorrectly extracts as entities.
+At full scale, PubMed recall (0.984–0.986) is essentially identical to the patent recall (0.99). The earlier lower recall (0.56–0.78 in the limited-overlap run) was a sampling artefact — not a genuine domain difference. Precision is lower on PubMed than on patents because patent annotations covered only focal terms in claim text (a narrow, curated vocabulary), whereas PubMed benchmarks expose the full extent of GLiNER's indiscriminate extraction.
 
 ---
 
 ## 8. Conclusions
 
-GLiNER functions as a **broad, noisy first-pass extractor**: it achieves high recall for common entity types (diseases, chemicals) but systematically misses specialised identifiers (cell lines, gene symbols, abbreviations), and produces low precision due to indiscriminate extraction of generic tokens. These properties are robust across two independent domains and two evaluation designs.
+With full benchmark coverage, the evaluation confirms that GLiNER functions as a **near-complete recall extractor** (~98.5%) across all three biomedical NER corpora and both annotation styles (human + benchmark). The high-recall / low-precision profile is robust across domains, corpora, and evaluation designs.
 
-For downstream use in focal-term extraction or literature mining, these results support a **two-stage pipeline**: GLiNER for high-recall candidate generation, followed by a precision-oriented filtering step — for example, a minimum term-length threshold, a biomedical stop-word list, or entity-type confidence filtering — to remove noise before terms are used for indexing or matching.
+For downstream use in focal-term extraction or literature mining, these results reinforce a **two-stage pipeline**: GLiNER for near-complete candidate generation, followed by a precision-oriented filtering step (entity-type confidence thresholds, a biomedical stop-word list, or minimum span length) to reduce noise before terms are used for indexing or matching.
 
 ---
 
@@ -230,11 +249,12 @@ For downstream use in focal-term extraction or literature mining, these results 
 
 | File | Location | Description |
 |------|----------|-------------|
-| `bc5cdr_per_pmid.csv` | `output/pubmed_validation/` | Per-PMID evaluation table for BC5CDR |
-| `biored_per_pmid.csv` | `output/pubmed_validation/` | Per-PMID evaluation table for BioRED |
-| `biored_by_entity_type.csv` | `output/pubmed_validation/` | BioRED recall broken down by entity type |
-| `benchmark_summary.csv` | `output/pubmed_validation/` | Aggregate metrics for all three benchmarks |
-| `metrics_and_match_distribution.png` | `visualizations/pubmed_validation/` | Micro metrics bar chart + match distribution |
-| `per_pmid_recall_distribution.png` | `visualizations/pubmed_validation/` | Per-document recall histograms |
-| `biored_recall_by_entity_type.png` | `visualizations/pubmed_validation/` | BioRED recall by entity type |
-| `top_missed_entities.png` | `visualizations/pubmed_validation/` | Top missed GT entities (BC5CDR and BioRED) |
+| `benchmark_summary.csv` | `output/validation/pubmed_validation/` | Aggregate metrics for all three benchmarks |
+| `bc5cdr_per_pmid.csv` | `output/validation/pubmed_validation/` | Per-PMID evaluation table for BC5CDR (1,500 rows) |
+| `biored_per_pmid.csv` | `output/validation/pubmed_validation/` | Per-PMID evaluation table for BioRED (600 rows) |
+| `ncbi_per_pmid.csv` | `output/validation/pubmed_validation/` | Per-PMID evaluation table for NCBI Disease (792 rows) |
+| `biored_by_entity_type.csv` | `output/validation/pubmed_validation/` | BioRED recall broken down by entity type |
+| `metrics_and_match_distribution.png` | `visualizations/validation/pubmed_validation/` | Micro metrics bar chart + match distribution (all 3 benchmarks) |
+| `per_pmid_recall_distribution.png` | `visualizations/validation/pubmed_validation/` | Per-document recall histograms (all 3 benchmarks) |
+| `biored_recall_by_entity_type.png` | `visualizations/validation/pubmed_validation/` | BioRED recall by entity type |
+| `top_missed_entities.png` | `visualizations/validation/pubmed_validation/` | Top missed GT entities (all 3 benchmarks) |

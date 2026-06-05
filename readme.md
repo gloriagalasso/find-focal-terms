@@ -108,7 +108,7 @@
 
 **Goal:** Evaluate how well GLiNER extracts biomedical entity mentions from PubMed abstracts, by matching GLiNER-extracted terms against three established NER benchmark datasets (BC5CDR, BioRED, NCBI Disease) on shared PMIDs. No human annotation required — ground truth comes from the benchmarks.
 
-**Data source (re-run):** Initial analysis used a random PubMed sample (`data/raw/v3_16042026/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet`, 207M rows, 881k PMIDs) and found only 3–8% PMID overlap with the benchmarks and 0% for NCBI Disease (which covers pre-2000 articles). The analysis was re-run using a dedicated JSON (`data/raw/pubmed_validation/specialized_pubmed_samples_with_entities.json`) provided by Raphael, which contains GLiNER labels run specifically on all benchmark PMIDs, achieving 100% coverage across all three corpora.
+**Data source (re-run):** Initial analysis used a random PubMed sample (`data/raw/v3_16042026/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet`, 207M rows, 881k PMIDs) and found only 3–8% PMID overlap with the benchmarks and 0% for NCBI Disease (which covers pre-2000 articles). The analysis was re-run using a dedicated JSON (`data/raw/pubmed_validation/specialized_pubmed_samples_with_entities.json`) which contains GLiNER labels run specifically on all benchmark PMIDs, achieving 100% coverage across all three corpora.
 
 **Steps:**
 
