@@ -203,6 +203,8 @@ Horizontal bar chart of recall per entity type in BioRED, sorted ascending. All 
 
 Top 15 ground-truth mentions most frequently missed by GLiNER, counted by the number of articles (PMIDs) in which each term was not extracted. A term counts at most once per article even if it appears multiple times in that abstract.
 
+**Note:** a term appearing at the top of this chart does not mean GLiNER is particularly bad at finding it — it may simply be a very common term. For example, "toxicity" was missed in 16 PMIDs but correctly found in 105, giving ~87% recall for that term. The more telling misses are adjective forms such as "nephrotoxic" and "hypertensive", which GLiNER tends to miss because it extracts the noun form ("nephrotoxicity", "hypertension") instead.
+
 ---
 
 ## 6. Findings
