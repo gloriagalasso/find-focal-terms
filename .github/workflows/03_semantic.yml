@@ -86,7 +86,7 @@ jobs:
           EOF
 
       - name: Run 03_semantic.py
-        run: python full-notebook/03_semantic.py
+        run: python scripts/03_semantic.py
 
       - name: Export viewer_data.json
         run: |

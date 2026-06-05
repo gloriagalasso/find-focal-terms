@@ -56,7 +56,7 @@ jobs:
           EOF
 
       - name: Run 02_analysis.py
-        run: python full-notebook/02_analysis.py
+        run: python scripts/02_analysis.py
 
       - name: Upload outputs to R2
         env:

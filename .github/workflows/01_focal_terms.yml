@@ -80,7 +80,7 @@ jobs:
           EOF
 
       - name: Run 01_focal_terms.py
-        run: python full-notebook/01_focal_terms.py
+        run: python scripts/01_focal_terms.py
 
       - name: Upload outputs to R2
         env:
