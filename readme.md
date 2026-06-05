@@ -108,29 +108,29 @@
 
 **Goal:** Evaluate how well GLiNER extracts biomedical entity mentions from PubMed abstracts, by matching GLiNER-extracted terms against three established NER benchmark datasets (BC5CDR, BioRED, NCBI Disease) on shared PMIDs. No human annotation required — ground truth comes from the benchmarks.
 
+**Data source (re-run):** Initial analysis used a random PubMed sample (`FullSampleGloria_Pmed_GlinerLabels_16042026.parquet`, 207M rows, 881k PMIDs) and found only 3–8% PMID overlap with the benchmarks and 0% for NCBI Disease (which covers pre-2000 articles). The analysis was re-run using a dedicated JSON (`specialized_pubmed_samples_with_entities.json`) provided by Raphael, which contains GLiNER labels run specifically on all benchmark PMIDs, achieving 100% coverage across all three corpora.
+
 **Steps:**
 
-1. **Parse benchmarks** from PubTator format into `{pmid: [(mention, entity_type), ...]}` dictionaries. All three benchmarks (BC5CDR: 1500 PMIDs, BioRED: 600 PMIDs, NCBI Disease: 793 PMIDs) were parsed.
+1. **Parse benchmarks** from PubTator format into `{pmid: [(mention, entity_type), ...]}` dictionaries. All three benchmarks (BC5CDR: 1500 PMIDs, BioRED: 600 PMIDs, NCBI Disease: 792 PMIDs) were parsed.
 
-2. **Find overlapping PMIDs** by intersecting each benchmark's PMID set with the 881,341 GLiNER PMIDs. Only overlapping articles can be compared. NCBI Disease had 0 overlap (its PMIDs cover pre-2000 articles barely represented in the GLiNER sample).
+2. **Load GLiNER labels from the dedicated JSON.** Each entry in the JSON represents one article and contains sentence-level entity extractions with text, label, confidence score, and character offsets. Entity texts are lowercased and collected into a set per PMID. For BioRED, where some PMIDs appear across multiple splits (train/dev/test), terms from all splits are merged.
 
-3. **Filter GLiNER data** to the ~90 overlapping PMIDs before groupby, reducing 207M rows to ~21,000 for efficiency.
-
-4. **Match terms** using exact match (GLiNER term == GT mention) and partial match (one is a substring of the other), then compute precision, recall, and F1 at both micro and macro level.
+3. **Match terms** using exact match (GLiNER term == GT mention) and partial match (one appears as whole words inside the other, using regex lookarounds to handle chemical names with brackets). Compute precision, recall, and F1 at both micro and macro level.
 
 **Key results:**
 
-| Benchmark | Overlap PMIDs | Micro Precision | Micro Recall | Micro F1 |
-|-----------|--------------|-----------------|--------------|----------|
-| BC5CDR | 46 | 0.204 | 0.782 | 0.323 |
-| BioRED | 48 | 0.203 | 0.559 | 0.297 |
-| NCBI Disease | 0 | — | — | — |
+| Benchmark | PMIDs | GT Mentions | Micro Precision | Micro Recall | Micro F1 |
+|-----------|-------|-------------|-----------------|--------------|----------|
+| BC5CDR | 1,500 | 12,614 | 0.163 | 0.985 | 0.280 |
+| BioRED | 600 | 9,421 | 0.240 | 0.984 | 0.386 |
+| NCBI Disease | 792 | 3,864 | 0.105 | 0.986 | 0.189 |
 
-BioRED recall by entity type: Disease (0.77) > Chemical (0.71) > Organism (0.49) > Gene (0.41) > Variant (0.38) > CellLine (0.00).
+BioRED recall by entity type: OrganismTaxon (0.991) > GeneOrGeneProduct (0.990) > ChemicalEntity (0.987) > Disease (0.980) > SequenceVariant (0.977) > CellLine (0.880). The earlier recall gradient (CellLine = 0.00 at 17 annotations) has flattened at full scale (92 annotations).
 
-**Main findings:** Recall is lower than for patents (0.78/0.56 vs. 0.99) because biomedical entity names are longer multi-word phrases that GLiNER fragments into single tokens. Precision is similarly low (~0.20) due to generic noise terms. Cell lines are never captured (recall = 0.00). The pattern is consistent with the patent validation: GLiNER is a high-extraction, noisy first-pass tagger that benefits from downstream filtering.
+**Main findings:** GLiNER achieves near-perfect recall (~0.985) across all three benchmarks, matching the patent validation result (0.99). The earlier lower recall (0.56–0.78) was a sampling artefact from low PMID overlap, not a genuine domain difference. Precision is low (0.10–0.24) because GLiNER extracts all entity types while each benchmark annotates only a subset. NCBI Disease precision (0.105) is lowest as it is a disease-only corpus. Partial matches account for 28–52% of all matched mentions, with NCBI Disease having the highest partial-match share (52%) because older disease names tend to be long multi-word constructions. The finding is consistent with patent validation: GLiNER is a near-complete recall extractor that benefits from downstream precision filtering.
 
-**Output:** `deliverables/pubmed_validation_deliverable.md`, `output/pubmed_validation/` (4 CSVs), `visualizations/pubmed_validation/` (4 plots).
+**Output:** `output/pubmed_validation/` (5 CSVs: `benchmark_summary.csv`, `bc5cdr_per_pmid.csv`, `biored_per_pmid.csv`, `ncbi_per_pmid.csv`, `biored_by_entity_type.csv`), `visualizations/pubmed_validation/` (4 plots).
 
 ---
 
