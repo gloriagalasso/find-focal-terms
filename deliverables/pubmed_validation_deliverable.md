@@ -81,9 +81,9 @@ Each entry in the JSON represents one article. Entity texts were extracted from 
 
 ### Step 4 — Match GLiNER terms against ground truth
 
-For each PMID, GLiNER terms were compared against deduplicated ground-truth mentions using two criteria:
+For each PMID, GLiNER terms were compared against the human-annotated mentions from the benchmark. These are referred to as **GT (ground-truth) mentions** throughout — i.e. the entity mentions that human experts labelled in the benchmark datasets. Two types of match were counted:
 
-- **Exact match**: GT mention equals a GLiNER term
+- **Exact match**: the GT mention is identical to a GLiNER term
 - **Partial match**: a GLiNER term appears as whole words inside the GT mention, or vice versa
 
 Partial matching uses **word-boundary lookarounds** (`(?<!\w)...(?!\w)`) rather than a bare `in` check, to avoid false positives where short noise tokens (e.g. `"no"`) match as substrings of unrelated words. Standard `\b` was not used because it fails for chemical names ending in non-word characters such as parentheses (e.g. `"znso(4)"`).
@@ -201,7 +201,7 @@ Horizontal bar chart of recall per entity type in BioRED, sorted ascending. All 
 
 ![Top missed entities](../visualizations/validation/pubmed_validation/top_missed_entities.png)
 
-Top 15 most frequently missed ground-truth mentions for BC5CDR, BioRED, and NCBI Disease.
+Top 15 ground-truth mentions most frequently missed by GLiNER, counted by the number of articles (PMIDs) in which each term was not extracted. A term counts at most once per article even if it appears multiple times in that abstract.
 
 ---
 
