@@ -6,15 +6,15 @@
 
 **Steps:**
 
-1. **Load patent terms** from `SampleGloria_Pat_GlinerLabels.parquet` (`patent_id`, `term`). Group by `(patent_id, term)` and count occurrences → `freq_in_patent`.
+1. **Load patent terms** from `data/raw/v1/SampleGloria_Pat_GlinerLabels.parquet` (`patent_id`, `term`). Group by `(patent_id, term)` and count occurrences → `freq_in_patent`.
 
-2. **Clean the link table** from `SampleGloria_Link_PmidOa.parquet`. Drop rows without a PMID, extract the numeric ID from the URL via regex (`(\d+)$`), yielding clean `(patent_id, pmid)` pairs.
+2. **Clean the link table** from `data/raw/v1/SampleGloria_Link_PmidOa.parquet`. Drop rows without a PMID, extract the numeric ID from the URL via regex (`(\d+)$`), yielding clean `(patent_id, pmid)` pairs.
 
-3. **Load paper terms** from `SampleGloria_Pmed_GlinerLabels.parquet` (`pmid`, `term`). Merge with the cleaned link table to attach `patent_id` to each paper term. Group by `(patent_id, pmid, term)` → `freq_in_cited_paper`.
+3. **Load paper terms** from `data/raw/v1/SampleGloria_Pmed_GlinerLabels.parquet` (`pmid`, `term`). Merge with the cleaned link table to attach `patent_id` to each paper term. Group by `(patent_id, pmid, term)` → `freq_in_cited_paper`.
 
 4. **Identify focal terms** by inner-joining patent terms and cited paper terms on `(patent_id, term)`. Any term present in both is a focal term. Aggregate across PMIDs, summing `freq_in_cited_paper`.
 
-**Output:** `output/focal_terms.parquet` — 790 `(patent_id, focal_term)` pairs across 101 patents.
+**Output:** `output/v1/focal_terms.parquet` — 790 `(patent_id, focal_term)` pairs across 101 patents.
 
 ---
 
@@ -24,15 +24,15 @@
 
 **Steps:**
 
-1. **Load patent terms** from `SampleGloria_Pat_GlinerLabels_20260323.parquet`. Group by `(patent_id, term)` → `freq_in_patent`.
+1. **Load patent terms** from `data/raw/v2_20260323/SampleGloria_Pat_GlinerLabels_20260323.parquet`. Group by `(patent_id, term)` → `freq_in_patent`.
 
-2. **Clean the link table** from `SampleGloria_Link_PmidOa_20260323.parquet`. Drop duplicate `(patent_id, pmid)` rows that arise from multiple matching sources.
+2. **Clean the link table** from `data/raw/v2_20260323/SampleGloria_Link_PmidOa_20260323.parquet`. Drop duplicate `(patent_id, pmid)` rows that arise from multiple matching sources.
 
-3. **Load paper terms** from `SampleGloria_Pmed_GlinerLabels_20260323.parquet`. Merge with the cleaned link table to attach `patent_id`. Group by `(patent_id, term)` → `freq_in_cited_papers`.
+3. **Load paper terms** from `data/raw/v2_20260323/SampleGloria_Pmed_GlinerLabels_20260323.parquet`. Merge with the cleaned link table to attach `patent_id`. Group by `(patent_id, term)` → `freq_in_cited_papers`.
 
 4. **Identify focal terms** by inner-joining patent terms and cited paper terms on `(patent_id, term)`.
 
-**Output:** `output/focal_terms_20260323.parquet` — 19,145 `(patent_id, focal_term)` pairs across 14,237 patents and 4,611 unique focal terms.
+**Output:** `output/v2_20260323/focal_terms_20260323.parquet` — 19,145 `(patent_id, focal_term)` pairs across 14,237 patents and 4,611 unique focal terms.
 
 ---
 
@@ -48,7 +48,7 @@
 
 3. Visualise the distribution with a histogram and a KDE density plot, marking mean and median.
 
-**Output:** `deliverables/task2_deliverable.md`, `visualizations/histogram_focal_terms.png`, `visualizations/density_focal_terms.png`.
+**Output:** `deliverables/task2_deliverable.md`, `visualizations/v1/histogram_focal_terms.png`, `visualizations/v1/density_focal_terms.png`.
 
 ---
 
@@ -64,7 +64,7 @@
 
 3. Visualise the distribution with a histogram and a KDE density plot.
 
-**Output:** `visualizations/histogram_focal_terms_20260323.png`, `visualizations/density_focal_terms_20260323.png`.
+**Output:** `visualizations/v2_20260323/histogram_focal_terms_20260323.png`, `visualizations/v2_20260323/density_focal_terms_20260323.png`.
 
 ---
 
@@ -86,7 +86,7 @@
 
 5. **Compute cosine similarity** row-wise via `cosine_similarity(...).diagonal()`. Summary statistics: mean 0.441, median 0.443, std 0.140, min -0.008, max 0.843.
 
-**Output:** `deliverables/task3_deliverable.md`, `output/focal_term_context.parquet`, `output/cosine_similarity_results.parquet`, `visualizations/cosine_similarity_distribution.png`.
+**Output:** `deliverables/task3_deliverable.md`, `output/v1/focal_term_context.parquet`, `output/v1/cosine_similarity_results.parquet`, `visualizations/v1/cosine_similarity_distribution.png`.
 
 ---
 
@@ -100,7 +100,7 @@
 
 5. **Compute cosine similarity.** Summary statistics: mean 0.375, median 0.379, std 0.128, min -0.109, max 0.795.
 
-**Output:** `deliverables/task3_20260323_deliverable.md`, `output/cosine_similarity_results_20260323.parquet`, `visualizations/cosine_similarity_distribution_20260323.png`.
+**Output:** `deliverables/task3_20260323_deliverable.md`, `output/v2_20260323/cosine_similarity_results_20260323.parquet`, `visualizations/v2_20260323/cosine_similarity_distribution_20260323.png`.
 
 ---
 
@@ -108,7 +108,7 @@
 
 **Goal:** Evaluate how well GLiNER extracts biomedical entity mentions from PubMed abstracts, by matching GLiNER-extracted terms against three established NER benchmark datasets (BC5CDR, BioRED, NCBI Disease) on shared PMIDs. No human annotation required — ground truth comes from the benchmarks.
 
-**Data source (re-run):** Initial analysis used a random PubMed sample (`FullSampleGloria_Pmed_GlinerLabels_16042026.parquet`, 207M rows, 881k PMIDs) and found only 3–8% PMID overlap with the benchmarks and 0% for NCBI Disease (which covers pre-2000 articles). The analysis was re-run using a dedicated JSON (`specialized_pubmed_samples_with_entities.json`) provided by Raphael, which contains GLiNER labels run specifically on all benchmark PMIDs, achieving 100% coverage across all three corpora.
+**Data source (re-run):** Initial analysis used a random PubMed sample (`data/raw/v3_16042026/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet`, 207M rows, 881k PMIDs) and found only 3–8% PMID overlap with the benchmarks and 0% for NCBI Disease (which covers pre-2000 articles). The analysis was re-run using a dedicated JSON (`data/raw/pubmed_validation/specialized_pubmed_samples_with_entities.json`) provided by Raphael, which contains GLiNER labels run specifically on all benchmark PMIDs, achieving 100% coverage across all three corpora.
 
 **Steps:**
 
@@ -130,7 +130,7 @@ BioRED recall by entity type: OrganismTaxon (0.991) > GeneOrGeneProduct (0.990) 
 
 **Main findings:** GLiNER achieves near-perfect recall (~0.985) across all three benchmarks, matching the patent validation result (0.99). The earlier lower recall (0.56–0.78) was a sampling artefact from low PMID overlap, not a genuine domain difference. Precision is low (0.10–0.24) because GLiNER extracts all entity types while each benchmark annotates only a subset. NCBI Disease precision (0.105) is lowest as it is a disease-only corpus. Partial matches account for 28–52% of all matched mentions, with NCBI Disease having the highest partial-match share (52%) because older disease names tend to be long multi-word constructions. The finding is consistent with patent validation: GLiNER is a near-complete recall extractor that benefits from downstream precision filtering.
 
-**Output:** `output/pubmed_validation/` (5 CSVs: `benchmark_summary.csv`, `bc5cdr_per_pmid.csv`, `biored_per_pmid.csv`, `ncbi_per_pmid.csv`, `biored_by_entity_type.csv`), `visualizations/pubmed_validation/` (4 plots).
+**Output:** `output/validation/pubmed_validation/` (5 CSVs: `benchmark_summary.csv`, `bc5cdr_per_pmid.csv`, `biored_per_pmid.csv`, `ncbi_per_pmid.csv`, `biored_by_entity_type.csv`), `visualizations/validation/pubmed_validation/` (4 plots).
 
 ---
 
@@ -167,4 +167,4 @@ BioRED recall by entity type: OrganismTaxon (0.991) > GeneOrGeneProduct (0.990) 
 
 **Main findings:** GLiNER has near-perfect recall but low precision — it extracts ~3.7× more terms than humans. The 904 unmatched GLiNER terms are dominated by patent legal boilerplate (`wherein`, `method`, `claim`). Half of all matches are partial, reflecting a systematic span boundary problem. Label accuracy is low (0.34) but most confusions are between hierarchically adjacent categories (e.g. Organic Chemical ↔ Chemical).
 
-**Output:** `deliverables/validation_deliverable.md`, `visualizations/validation_visualizations/` (4 plots), `output/validation_outputs/` (2 CSVs), `data/annotation/` (evaluation tables).
+**Output:** `deliverables/validation_deliverable.md`, `visualizations/validation/validation_visualizations/` (4 plots), `output/validation/validation_outputs/` (2 CSVs), `data/annotation/` (evaluation tables).
