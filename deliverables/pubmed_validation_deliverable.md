@@ -23,7 +23,7 @@ This validation task evaluates how well **GLiNER** extracts biomedical entity me
 
 **Note on data source:** The initial run used a random PubMed sample (`data/raw/v3_16042026/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet`, 207M rows, 881k PMIDs). That file had very low overlap with the benchmark PMIDs (3–8% for BC5CDR and BioRED, 0% for NCBI Disease), because the benchmarks skew toward pre-2000 articles that were not well represented in the random sample. Without matching PMIDs, no comparison was possible.
 
-The supervisor identified the problem and ran GLiNER specifically on the abstracts of all benchmark PMIDs, packaging the output as `specialized_pubmed_samples_with_entities.json`. This file contains GLiNER's entity extractions — the same model used on patents, applied here to PubMed abstracts — for every PMID in the three benchmarks, achieving 100% coverage.
+`specialized_pubmed_samples_with_entities.json`  contains GLiNER's entity extractions — the same model used on patents, applied here to PubMed abstracts for every PMID in the three benchmarks, achieving 100% coverage.
 
 All three benchmarks are distributed in **PubTator format**:
 
@@ -56,9 +56,16 @@ The JSON file has one entry per article with nested sentence-level entities:
 
 ## 3. Process
 
-### Step 1 — Parse benchmark datasets
+### Step 1 — Read the benchmark datasets
 
-All three benchmark datasets were parsed from PubTator format into `{pmid: [(mention, entity_type), ...]}` dictionaries. Mentions were lowercased and stripped of whitespace.
+Each benchmark is distributed as a plain-text file in PubTator format. Each line either contains the title or abstract of an article, or one annotated entity mention. For example:
+
+```
+227508   naloxone   Chemical
+227508   hypertensive   Disease
+```
+
+The code reads these files and builds a lookup table: for each article (identified by its PMID), store the list of annotated entity mentions and their types. All mentions are lowercased so that comparisons with GLiNER terms are case-insensitive.
 
 ### Step 2 — Load GLiNER labels from the dedicated JSON
 
