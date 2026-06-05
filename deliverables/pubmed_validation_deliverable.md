@@ -8,7 +8,7 @@
 
 ## 1. Objective
 
-This validation task evaluates how well **GLiNER** extracts biomedical entity mentions from PubMed abstracts, by comparing GLiNER-extracted terms against three established biomedical NER benchmark datasets. Unlike the patent-side validation, no human annotation was required — the benchmark datasets provide ground truth directly.
+This validation task evaluates how well **GLiNER** extracts biomedical entity mentions from PubMed abstracts, by comparing GLiNER-extracted terms against three established biomedical NER benchmark datasets. Unlike the patent-side validation, no human annotation was required. The benchmark datasets provide ground truth.
 
 ---
 
@@ -21,7 +21,9 @@ This validation task evaluates how well **GLiNER** extracts biomedical entity me
 | BioRED | `data/benchmarks/biored/BioRED/` | 6 entity types (chemicals, diseases, genes, variants, organisms, cell lines); 600 PMIDs |
 | NCBI Disease | `data/benchmarks/ncbi_disease/` | Disease name recognition; 792 PMIDs |
 
-**Note on data source:** An initial run used the random PubMed sample `data/raw/v3_16042026/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet` (207M rows, 881k PMIDs) and found only 3–8% PMID overlap with the benchmarks and 0% for NCBI Disease (pre-2000 articles). The analysis was re-run using the dedicated JSON above, which achieves 100% coverage across all three corpora.
+**Note on data source:** The initial run used a random PubMed sample (`data/raw/v3_16042026/FullSampleGloria_Pmed_GlinerLabels_16042026.parquet`, 207M rows, 881k PMIDs). That file had very low overlap with the benchmark PMIDs (3–8% for BC5CDR and BioRED, 0% for NCBI Disease), because the benchmarks skew toward pre-2000 articles that were not well represented in the random sample. Without matching PMIDs, no comparison was possible.
+
+The supervisor identified the problem and ran GLiNER specifically on the abstracts of all benchmark PMIDs, packaging the output as `specialized_pubmed_samples_with_entities.json`. This file contains GLiNER's entity extractions — the same model used on patents, applied here to PubMed abstracts — for every PMID in the three benchmarks, achieving 100% coverage.
 
 All three benchmarks are distributed in **PubTator format**:
 
