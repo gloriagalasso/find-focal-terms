@@ -31,10 +31,15 @@ PMED_PATH   = DATA_DIR / "FullSampleGloria_Pmed_GlinerLabels_16042026.parquet"
 FOCAL_PATH  = OUT_DIR / "focal_terms_full.parquet"
 
 CONTEXT_PATH = OUT_DIR / "task3_contexts_sample.parquet"
-RESULT_PATH  = OUT_DIR / "task3_cosine_similarity_sample.parquet"
 
-# Semantic embedding model
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+# Semantic embedding models
+# "sentence-transformers/all-MiniLM-L6-v2" was previously run
+MODELS = {
+    "FremyCompany/BioLORD-2023": "biolord",
+    "cambridgeltl/SapBERT-from-PubMedBERT-fulltext": "sapbert",
+}
+
+
 
 # Processing parameters
 N_SAMPLE = 20000      # Sample 20k focal pairs for semantic analysis (reduces computation)
@@ -48,7 +53,7 @@ def elapsed(t0):
 
 print("=== TASK 3: Semantic Context Comparison ===")
 print(f"Sample size: {N_SAMPLE:,} focal pairs")
-print(f"Embedding model: {MODEL_NAME}")
+print(f"Embedding models: {list(MODELS.values())}")
 print(f"Chunk size: {CHUNK_SIZE} | Batch size: {ENCODE_BATCH}\n")
 
 t0_all = time.time()
@@ -235,220 +240,160 @@ del focal_pairs, patent_context, paper_context
 gc.collect()
 
 # =========================
-# STEP 7: Encode contexts and compute cosine similarity
+# STEP 7–12: Encode, evaluate, and save — per model
 # =========================
-print("Step 7: Encoding contexts with transformer model...")
-t0 = time.time()
-
-# Load the sentence transformer model
-model = SentenceTransformer(MODEL_NAME, device="cpu")
-
-# Track results as we process chunks
-all_patent_ids = []
-all_focal_terms = []
-all_patent_texts = []
-all_paper_texts = []
-all_similarities = []
-
 total_rows = len(contexts)
 
-# Process contexts in chunks to manage memory
-for start in range(0, total_rows, CHUNK_SIZE):
-    end = min(start + CHUNK_SIZE, total_rows)
-    chunk = contexts.slice(start, CHUNK_SIZE)
+for model_name, short in MODELS.items():
+    print(f"\n{'='*60}")
+    print(f"  MODEL: {short} ({model_name})")
+    print(f"{'='*60}")
 
-    patent_texts = []
-    paper_texts = []
+    # Step 7: Encode
+    print(f"\n[{short}] Encoding contexts...")
+    t0 = time.time()
 
-    # For each pair, construct text strings:
-    # - patent_text = focal_term + " " + other patent terms
-    # - paper_text = focal_term + " " + other paper terms
-    # This creates a representation of the semantic context around the focal term.
-    for row in chunk.iter_rows(named=True):
-        focal_term = row["focal_term"]
-        patent_terms = row["patent_context"] or []
-        paper_terms = row["paper_context"] or []
+    model = SentenceTransformer(model_name, device="cpu")
 
-        patent_text = focal_term + " " + " ".join(patent_terms)
-        paper_text = focal_term + " " + " ".join(paper_terms)
+    all_patent_ids = []
+    all_focal_terms = []
+    all_patent_texts = []
+    all_paper_texts = []
+    all_similarities = []
 
-        patent_texts.append(patent_text)
-        paper_texts.append(paper_text)
+    for start in range(0, total_rows, CHUNK_SIZE):
+        end = min(start + CHUNK_SIZE, total_rows)
+        chunk = contexts.slice(start, CHUNK_SIZE)
 
-    # Encode both context strings using the transformer
-    patent_emb = model.encode(
-        patent_texts,
-        batch_size=ENCODE_BATCH,
-        show_progress_bar=False,
-        normalize_embeddings=True,  # Normalize so cosine similarity is in [-1, 1]
-    )
+        patent_texts = []
+        paper_texts = []
 
-    paper_emb = model.encode(
-        paper_texts,
-        batch_size=ENCODE_BATCH,
-        show_progress_bar=False,
-        normalize_embeddings=True,
-    )
+        for row in chunk.iter_rows(named=True):
+            focal_term = row["focal_term"]
+            patent_terms = row["patent_context"] or []
+            paper_terms = row["paper_context"] or []
 
-    # Cosine similarity = dot product of normalized vectors
-    similarities = (patent_emb * paper_emb).sum(axis=1).astype(np.float32)
+            patent_text = focal_term + " " + " ".join(patent_terms)
+            paper_text = focal_term + " " + " ".join(paper_terms)
 
-    # Accumulate results
-    all_patent_ids.extend(chunk["patent_id"].to_list())
-    all_focal_terms.extend(chunk["focal_term"].to_list())
-    all_patent_texts.extend(patent_texts)
-    all_paper_texts.extend(paper_texts)
-    all_similarities.extend(similarities.tolist())
+            patent_texts.append(patent_text)
+            paper_texts.append(paper_text)
 
-    del chunk, patent_texts, paper_texts, patent_emb, paper_emb, similarities
+        patent_emb = model.encode(
+            patent_texts,
+            batch_size=ENCODE_BATCH,
+            show_progress_bar=False,
+            normalize_embeddings=True,
+        )
+
+        paper_emb = model.encode(
+            paper_texts,
+            batch_size=ENCODE_BATCH,
+            show_progress_bar=False,
+            normalize_embeddings=True,
+        )
+
+        similarities = (patent_emb * paper_emb).sum(axis=1).astype(np.float32)
+
+        all_patent_ids.extend(chunk["patent_id"].to_list())
+        all_focal_terms.extend(chunk["focal_term"].to_list())
+        all_patent_texts.extend(patent_texts)
+        all_paper_texts.extend(paper_texts)
+        all_similarities.extend(similarities.tolist())
+
+        del chunk, patent_texts, paper_texts, patent_emb, paper_emb, similarities
+        gc.collect()
+
+        done = end
+        pct = done / total_rows * 100
+        elapsed_so_far = time.time() - t0
+        rate = done / max(elapsed_so_far, 1)
+        eta = (total_rows - done) / max(rate, 1)
+        print(f"  [{short}] {done:,}/{total_rows:,} ({pct:.1f}%) | ETA {eta / 60:.1f} min")
+
+    print(f"  [{short}] Encoding done in {elapsed(t0)}\n")
+
+    del model
     gc.collect()
 
-    # Progress indicator
-    done = end
-    pct = done / total_rows * 100
-    elapsed_so_far = time.time() - t0
-    rate = done / max(elapsed_so_far, 1)
-    eta = (total_rows - done) / max(rate, 1)
+    # Step 8: Save results
+    results = pl.DataFrame({
+        "patent_id": all_patent_ids,
+        "focal_term": all_focal_terms,
+        "patent_context_text": all_patent_texts,
+        "paper_context_text": all_paper_texts,
+        "cosine_similarity": all_similarities,
+    })
 
-    print(f"  Processed {done:,}/{total_rows:,} ({pct:.1f}%) | ETA {eta / 60:.1f} min")
+    results.write_parquet(OUT_DIR / f"task3_similarity_{short}.parquet")
+    results.write_csv(OUT_DIR / f"task3_similarity_{short}.csv")
+    print(f"  [{short}] Saved results")
 
-print(f"Done in {elapsed(t0)}\n")
+    # Step 9: Summary statistics
+    sim = results["cosine_similarity"].to_numpy()
 
-# =========================
-# STEP 8: Save similarity results
-# =========================
-print("Step 8: Saving results...")
-t0 = time.time()
+    summary = pl.DataFrame({
+        "statistic": ["mean", "median", "std", "min", "max", "n_pairs"],
+        "value": [
+            float(sim.mean()),
+            float(np.median(sim)),
+            float(sim.std()),
+            float(sim.min()),
+            float(sim.max()),
+            float(len(sim)),
+        ],
+    })
 
-# Compile all results into a single dataframe
-results = pl.DataFrame({
-    "patent_id": all_patent_ids,
-    "focal_term": all_focal_terms,
-    "patent_context_text": all_patent_texts,
-    "paper_context_text": all_paper_texts,
-    "cosine_similarity": all_similarities,
-})
+    summary.write_csv(OUT_DIR / f"task3_summary_{short}.csv")
+    print(f"  [{short}] Summary stats:")
+    print(summary)
 
-results.write_parquet(RESULT_PATH)
-results.write_csv(OUT_DIR / "task3_cosine_similarity_sample.csv")
+    # Step 10: High/low examples
+    high_examples = results.sort("cosine_similarity", descending=True).head(20)
+    low_examples = results.sort("cosine_similarity").head(20)
 
-print(f"  Saved results to: {RESULT_PATH}")
-print(f"  Done in {elapsed(t0)}\n")
+    high_examples.write_csv(OUT_DIR / f"task3_high_examples_{short}.csv")
+    low_examples.write_csv(OUT_DIR / f"task3_low_examples_{short}.csv")
 
-# =========================
-# STEP 9: Compute and display summary statistics
-# =========================
-print("Step 9: Computing similarity statistics...")
-t0 = time.time()
+    # Step 11: JSON summary
+    json_path = OUT_DIR / f"task3_summary_{short}.json"
+    json_path.write_text(json.dumps({
+        "model": model_name,
+        "summary_stats": {r["statistic"]: r["value"] for r in summary.to_dicts()},
+        "high_similarity_examples": (
+            high_examples
+            .select("patent_id", "focal_term", "cosine_similarity")
+            .to_dicts()
+        ),
+        "low_similarity_examples": (
+            low_examples
+            .select("patent_id", "focal_term", "cosine_similarity")
+            .to_dicts()
+        ),
+    }, indent=2))
+    print(f"  [{short}] JSON saved to: {json_path}")
 
-sim = results["cosine_similarity"].to_numpy()
+    # Step 12: Plot
+    plt.figure(figsize=(10, 6))
+    plt.hist(sim, bins=60, edgecolor="black", color="steelblue", alpha=0.7)
+    plt.axvline(sim.mean(), linestyle="--", linewidth=2, color="red", label=f"Mean = {sim.mean():.3f}")
+    plt.axvline(np.median(sim), linestyle="--", linewidth=2, color="orange", label=f"Median = {np.median(sim):.3f}")
+    plt.title(f"Cosine Similarity — {short}", fontsize=14, fontweight="bold")
+    plt.xlabel("Cosine Similarity", fontsize=12)
+    plt.ylabel("Number of focal-term pairs", fontsize=12)
+    plt.legend()
+    plt.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(VIZ_DIR / f"task3_distribution_{short}.png", dpi=300)
+    plt.close()
+    print(f"  [{short}] Plot saved")
 
-summary = pl.DataFrame({
-    "statistic": ["mean", "median", "std", "min", "max", "n_pairs"],
-    "value": [
-        float(sim.mean()),
-        float(np.median(sim)),
-        float(sim.std()),
-        float(sim.min()),
-        float(sim.max()),
-        float(len(sim)),
-    ],
-})
-
-summary.write_csv(OUT_DIR / "task3_similarity_summary_sample.csv")
-
-print(summary)
-print(f"Done in {elapsed(t0)}\n")
-
-# =========================
-# STEP 10: Identify high and low similarity examples
-# =========================
-print("Step 10: Finding example pairs with high and low similarity...")
-t0 = time.time()
-
-# High similarity = semantic context is very similar between patent and papers
-# Low similarity = semantic context is quite different between patent and papers
-high_examples = (
-    results
-    .sort("cosine_similarity", descending=True)
-    .head(20)
-)
-
-low_examples = (
-    results
-    .sort("cosine_similarity")
-    .head(20)
-)
-
-high_examples.write_csv(OUT_DIR / "task3_high_similarity_examples_sample.csv")
-low_examples.write_csv(OUT_DIR / "task3_low_similarity_examples_sample.csv")
-
-print(f"  Found 20 high-similarity and 20 low-similarity examples")
-print("\nHigh similarity examples (focal term context most similar):")
-print(high_examples.select("patent_id", "focal_term", "cosine_similarity").head(10))
-
-print("\nLow similarity examples (focal term context most different):")
-print(low_examples.select("patent_id", "focal_term", "cosine_similarity").head(10))
-print(f"Done in {elapsed(t0)}\n")
-
-# =========================
-# STEP 11: Export JSON summary
-# =========================
-print("Step 11: Exporting JSON summary...")
-t0 = time.time()
-
-json_path = OUT_DIR / "task3_semantic_summary.json"
-json_path.write_text(json.dumps({
-    "summary_stats": {r["statistic"]: r["value"] for r in summary.to_dicts()},
-    "high_similarity_examples": (
-        high_examples
-        .select("patent_id", "focal_term", "cosine_similarity")
-        .to_dicts()
-    ),
-    "low_similarity_examples": (
-        low_examples
-        .select("patent_id", "focal_term", "cosine_similarity")
-        .to_dicts()
-    ),
-}, indent=2))
-print(f"  JSON summary saved to: {json_path}")
-print(f"  Done in {elapsed(t0)}\n")
-
-# =========================
-# STEP 12: Visualize similarity distribution
-# =========================
-print("Step 12: Creating similarity distribution plot...")
-t0 = time.time()
-
-plt.figure(figsize=(10, 6))
-
-plt.hist(
-    sim,
-    bins=60,
-    edgecolor="black",
-    color="steelblue",
-    alpha=0.7,
-)
-
-plt.axvline(sim.mean(), linestyle="--", linewidth=2, color="red", label=f"Mean = {sim.mean():.3f}")
-plt.axvline(np.median(sim), linestyle="--", linewidth=2, color="orange", label=f"Median = {np.median(sim):.3f}")
-
-plt.title("Semantic Similarity Between Patent and Cited Paper Contexts", fontsize=14, fontweight="bold")
-plt.xlabel("Cosine Similarity", fontsize=12)
-plt.ylabel("Number of focal-term pairs", fontsize=12)
-plt.legend()
-plt.grid(axis="y", alpha=0.3)
-plt.tight_layout()
-
-plt.savefig(VIZ_DIR / "task3_cosine_similarity_distribution_sample.png", dpi=300)
-plt.close()
-
-print(f"  Saved plot to: {VIZ_DIR / 'task3_cosine_similarity_distribution_sample.png'}")
-print(f"Done in {elapsed(t0)}\n")
+    del results, sim, summary, high_examples, low_examples
+    gc.collect()
 
 # =========================
 # SUMMARY
 # =========================
-print("=" * 60)
+print(f"\n{'='*60}")
 print(f"TASK 3 COMPLETE | Total time: {elapsed(t0_all)}")
-print("=" * 60)
+print(f"{'='*60}")
