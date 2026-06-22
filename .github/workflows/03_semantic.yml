@@ -47,7 +47,7 @@ jobs:
           import boto3, os
           s3 = boto3.client(
               's3',
-              endpoint_url='https://977a2b4bf497816f10a436148fcf51b9.r2.cloudflarestorage.com',
+              endpoint_url='https://c6ec75bde4f8f0d307d63edb221db6a3.r2.cloudflarestorage.com',
               aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
               aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
               region_name='auto'
@@ -55,7 +55,7 @@ jobs:
           key = f"outcomes/01_focal_terms_${{ github.event.inputs.mode }}.parquet"
           dest = 'output/focal_terms_full.parquet'
           print(f"Downloading {key} -> {dest}...")
-          s3.download_file('parquetunistuttgart', key, dest)
+          s3.download_file('gloria-hiwi', key, dest)
           print(f"  saved ({os.path.getsize(dest) / 1e6:.1f} MB)")
           EOF
 
@@ -68,12 +68,12 @@ jobs:
           import boto3, os
           s3 = boto3.client(
               's3',
-              endpoint_url='https://977a2b4bf497816f10a436148fcf51b9.r2.cloudflarestorage.com',
+              endpoint_url='https://c6ec75bde4f8f0d307d63edb221db6a3.r2.cloudflarestorage.com',
               aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
               aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
               region_name='auto'
           )
-          bucket = 'parquetunistuttgart'
+          bucket = 'gloria-hiwi'
           files = {
               'FullSampleGloria_Pat_GlinerLabels.parquet':           'data/FullSampleGloria_Pat_GlinerLabels_16042026.parquet',
               'FullSampleGloria_Link_PmidOa.parquet':                'data/FullSampleGloria_Link_PmidOa_16042026.parquet',
@@ -173,7 +173,7 @@ jobs:
           import boto3, os
           s3 = boto3.client(
               's3',
-              endpoint_url='https://977a2b4bf497816f10a436148fcf51b9.r2.cloudflarestorage.com',
+              endpoint_url='https://c6ec75bde4f8f0d307d63edb221db6a3.r2.cloudflarestorage.com',
               aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'],
               aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY'],
               region_name='auto'
@@ -190,6 +190,6 @@ jobs:
                   print(f"Skipping {src} (not found)")
                   continue
               print(f"Uploading {src} -> {key} ({os.path.getsize(src) / 1e6:.2f} MB)...")
-              s3.upload_file(src, 'parquetunistuttgart', key)
+              s3.upload_file(src, 'gloria-hiwi', key)
               print("  done.")
           EOF

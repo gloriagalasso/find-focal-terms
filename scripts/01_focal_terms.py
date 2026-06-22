@@ -175,9 +175,13 @@ for batch_idx, start in enumerate(range(0, n_patents, BATCH_SIZE), start=1):
     # We keep only the intersection: terms in both.
     focal = (
         links
-        .join(pmed_terms, on="pmid", how="inner")  # Match terms to papers
-        .join(pat_terms, on=["patent_id", "term"], how="inner")  # Match terms to patents
-        .select(["patent_id", "pmid", "term", "freq_in_patent", "freq_in_paper"])
+        .join(pmed_terms, on="pmid", how="inner")
+        .join(pat_terms, on=["patent_id", "term"], how="inner")
+        .group_by(["patent_id", "term"])
+        .agg([
+            pl.col("freq_in_patent").first(),
+            pl.col("freq_in_paper").sum().alias("freq_in_cited_papers"),
+        ])
         .rename({"term": "focal_term"})
     )
 
@@ -202,11 +206,10 @@ t0 = time.time()
 if not batch_files:
     print("  No focal terms found across all batches. Writing empty parquet.")
     schema = {
-        "patent_id":      pl.String,
-        "pmid":           pl.Int64,
-        "focal_term":     pl.String,
-        "freq_in_patent": pl.UInt32,
-        "freq_in_paper":  pl.UInt32,
+        "patent_id":           pl.String,
+        "focal_term":          pl.String,
+        "freq_in_patent":      pl.UInt32,
+        "freq_in_cited_papers": pl.UInt32,
     }
     empty = pl.DataFrame(schema=schema)
     empty.write_parquet(FINAL_PATH)
@@ -232,7 +235,6 @@ stats = (
     .select([
         pl.len().alias("n_rows"),
         pl.col("patent_id").n_unique().alias("n_patents"),
-        pl.col("pmid").n_unique().alias("n_pmids"),
         pl.col("focal_term").n_unique().alias("n_focal_terms"),
     ])
     .collect()
@@ -252,7 +254,6 @@ json_path = OUT_DIR / "focal_terms_full.json"
 json_path.write_text(json.dumps({
     "n_rows":        int(stats_row["n_rows"]),
     "n_patents":     int(stats_row["n_patents"]),
-    "n_pmids":       int(stats_row["n_pmids"]),
     "n_focal_terms": int(stats_row["n_focal_terms"]),
 }, indent=2))
 print(f"  JSON summary saved to: {json_path}")
