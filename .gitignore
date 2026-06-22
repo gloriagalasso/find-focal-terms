@@ -6,3 +6,6 @@ output/
 
 # System
 .DS_Store
+
+# Notes
+embedding_instructions.md
