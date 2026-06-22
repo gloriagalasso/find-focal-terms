@@ -32,7 +32,7 @@ jobs:
         run: pip install polars pyarrow boto3 numpy matplotlib
 
       - name: Create directories
-        run: mkdir -p output visualizations
+        run: mkdir -p output visualizations/v3_16042026/fullsample_visualizations
 
       - name: Download focal_terms_full.parquet from R2
         env:
@@ -77,6 +77,7 @@ jobs:
               'output/focal_term_counts_per_patent_full.parquet': f'outcomes/02_focal_term_counts_{mode}.parquet',
               'output/term_frequency_full.parquet':               f'outcomes/02_term_frequency_{mode}.parquet',
               'output/task2_analysis.json':                       f'outcomes/02_analysis_{mode}.json',
+              'visualizations/v3_16042026/fullsample_visualizations/histogram_focal_terms_full.png': f'outcomes/02_histogram_{mode}.png',
           }
           for src, key in files.items():
               print(f"Uploading {src} -> {key} ({os.path.getsize(src) / 1e6:.2f} MB)...")

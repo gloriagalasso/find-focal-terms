@@ -36,7 +36,7 @@ jobs:
             sentence-transformers
 
       - name: Create directories
-        run: mkdir -p data output visualizations
+        run: mkdir -p data output visualizations/v3_16042026/fullsample_visualizations
 
       - name: Download focal_terms_full.parquet from R2
         env:

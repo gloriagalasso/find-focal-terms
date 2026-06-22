@@ -19,7 +19,7 @@ from sentence_transformers import SentenceTransformer
 # =========================
 BASE     = Path(__file__).parent
 OUT_DIR  = BASE.parent / "output"
-VIZ_DIR  = BASE.parent / "visualizations"
+VIZ_DIR  = BASE.parent / "visualizations" / "v3_16042026" / "fullsample_visualizations"
 DATA_DIR = BASE.parent / "data"
 
 OUT_DIR.mkdir(exist_ok=True)

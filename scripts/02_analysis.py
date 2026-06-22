@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 # =========================
 BASE    = Path(__file__).parent
 OUT_DIR = BASE.parent / "output"
-VIZ_DIR = BASE.parent / "visualizations"
+VIZ_DIR = BASE.parent / "visualizations" / "v3_16042026" / "fullsample_visualizations"
 
 FOCAL_PATH = OUT_DIR / "focal_terms_full.parquet"
 
