@@ -104,6 +104,57 @@
 
 ---
 
+## Task 1 (v3 Full Sample) — Identify Focal Terms
+
+**Goal:** Same as Tasks 1/1b, applied to the full v3 dataset (16 April 2026).
+
+**Data:**
+- `FullSampleGloria_Pat_GlinerLabels_16042026.parquet` (~120M rows)
+- `FullSampleGloria_Link_PmidOa_16042026.parquet` (~27M rows)
+- `FullSampleGloria_Pmed_GlinerLabels_16042026.parquet` (~207M rows)
+
+All data stored on Cloudflare R2 (too large for GitHub or local execution).
+
+**Steps:**
+
+1. **Lazy scan** all three parquet files without loading into memory. Patent terms grouped by `(patent_id, term)` → `freq_in_patent`. PubMed terms grouped by `(pmid, term)` → `freq_in_cited_paper`. Link table cleaned (numeric PMID extraction).
+
+2. **Stream a three-way join** via Polars `sink_parquet`: links × PubMed terms × patent terms. Only terms present in both the patent and a cited paper survive the inner joins (= focal terms). Written to a temporary file with per-PMID granularity.
+
+3. **Aggregate** the temporary file: group by `(patent_id, focal_term)`, keep `freq_in_patent`, sum `freq_in_cited_paper` across all PMIDs → final output.
+
+**Why streaming:** The raw files exceed available RAM (~350M+ rows, several GB uncompressed). The previous batched approach (5,000 patents per batch, 256 batches) re-scanned the full parquet files for every batch. The streaming approach performs a single pass using Polars' partitioned streaming engine, keeping peak memory bounded.
+
+**Output columns:** `patent_id`, `focal_term`, `freq_in_patent`, `freq_in_cited_papers`.
+
+**Output:** `output/v3_16042026/outcomes_01_focal_terms_full.parquet` — 474,011 patents.
+
+**Infrastructure:** GitHub Actions (`ubuntu-latest`, 7 GB RAM) + Cloudflare R2 storage. Workflow: `.github/workflows/01_focal_terms.yml`.
+
+---
+
+## Task 2 (v3 Full Sample) — Measure Overlap Intensity
+
+**Goal:** Same as Tasks 2/2b, applied to the v3 full dataset.
+
+**Key results:** mean 8.85 focal terms per patent, median 6.0, std 8.66, min 1, max 158. 10.6% of patents have exactly 1 focal term.
+
+**Output:** `output/v3_16042026/outcomes_02_analysis_full.json`.
+
+---
+
+## Task 3 (v3 Full Sample) — Semantic Context Comparison
+
+**Goal:** Same as Tasks 3/3b, applied to the v3 full dataset.
+
+**Steps:** Same methodology as Task 3. Contexts built from term lists, embedded with `sentence-transformers/all-MiniLM-L6-v2`. 20,000 focal-term pairs sampled for tractable computation.
+
+**Key results:** mean cosine similarity 0.466, median 0.477, std 0.141. 43% of pairs above 0.5 (similar context), 4.1% below 0.2 (very different context), 0.1% negative.
+
+**Output:** `output/v3_16042026/outcomes_03_similarity_full.parquet`, `outcomes_03_contexts_full.parquet`, `outcomes_03_semantic_summary_full.json`, `task3_deliverable.json`.
+
+---
+
 ## PubMed Validation — GLiNER vs. NER Benchmarks
 
 **Goal:** Evaluate how well GLiNER extracts biomedical entity mentions from PubMed abstracts, by matching GLiNER-extracted terms against three established NER benchmark datasets (BC5CDR, BioRED, NCBI Disease) on shared PMIDs. No human annotation required — ground truth comes from the benchmarks.
