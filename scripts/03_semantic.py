@@ -36,7 +36,7 @@ CONTEXT_PATH = OUT_DIR / "task3_contexts_sample.parquet"
 # "sentence-transformers/all-MiniLM-L6-v2" was previously run
 MODELS = {
     "FremyCompany/BioLORD-2023": "biolord",
-    "cambridgeltl/SapBERT-from-PubMedBERT-fulltext": "sapbert",
+    "pritamdeka/S-PubMedBert-MS-MARCO": "pubmedbert",
 }
 
 

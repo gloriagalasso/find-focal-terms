@@ -182,9 +182,9 @@ jobs:
           files = {
               'output/task3_contexts_sample.parquet':      f'outcomes/03_contexts_{mode}.parquet',
               'output/task3_similarity_biolord.parquet':    f'outcomes/03_similarity_biolord_{mode}.parquet',
-              'output/task3_similarity_sapbert.parquet':    f'outcomes/03_similarity_sapbert_{mode}.parquet',
+              'output/task3_similarity_pubmedbert.parquet':    f'outcomes/03_similarity_pubmedbert_{mode}.parquet',
               'output/task3_summary_biolord.json':          f'outcomes/03_summary_biolord_{mode}.json',
-              'output/task3_summary_sapbert.json':          f'outcomes/03_summary_sapbert_{mode}.json',
+              'output/task3_summary_pubmedbert.json':          f'outcomes/03_summary_pubmedbert_{mode}.json',
               'output/viewer_data.json':                    f'outcomes/viewer_data_{mode}.json',
           }
           for src, key in files.items():
