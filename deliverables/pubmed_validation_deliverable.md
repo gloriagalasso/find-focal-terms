@@ -215,7 +215,7 @@ GLiNER recovers ~98.5% of all ground-truth entity mentions across all three corp
 
 ### Finding 2 — Low precision, driven by entity-type scope mismatch
 
-Precision ranges from 0.105 (NCBI Disease) to 0.240 (BioRED). GLiNER extracts terms across many entity types while each benchmark only annotates a specific subset, so the majority of GLiNER terms count as false positives by the benchmark's standard. NCBI Disease has the lowest precision because it is disease-only: all non-disease GLiNER terms are false positives by definition. BioRED has the highest precision because its six entity types overlap most closely with GLiNER's extraction vocabulary.
+Precision ranges from 0.105 (NCBI Disease) to 0.240 (BioRED). GLiNER extracts terms across many entity types while each benchmark only annotates a specific subset, so the majority of GLiNER terms count as false positives by the benchmark's standard. NCBI Disease has the lowest precision because it is disease-only: all non-disease GLiNER terms are false positives by definition. BioRED has the highest precision because it annotates 6 entity types — the broadest scope of the three benchmarks — so more of GLiNER's diverse extractions count as true positives.
 
 ### Finding 3 — Partial matching is essential, especially for NCBI Disease
 
@@ -252,7 +252,12 @@ At full scale, PubMed recall (0.984–0.986) is essentially identical to the pat
 
 With full benchmark coverage, the evaluation confirms that GLiNER functions as a **near-complete recall extractor** (~98.5%) across all three biomedical NER corpora and both annotation styles (human + benchmark). The high-recall / low-precision profile is robust across domains, corpora, and evaluation designs.
 
-For downstream use in focal-term extraction or literature mining, these results reinforce a **two-stage pipeline**: GLiNER for near-complete candidate generation, followed by a precision-oriented filtering step (entity-type confidence thresholds, a biomedical stop-word list, or minimum span length) to reduce noise before terms are used for indexing or matching.
+For practical use, these results suggest a **two-stage approach**:
+
+1. **GLiNER extracts everything** — it casts a wide net and misses almost nothing (~98.5% recall), but also picks up noise: generic words, wrong entity types, boilerplate.
+2. **Filter before using the terms** — before matching or indexing, clean up the extractions. For example: keep only high-confidence terms, remove very common generic words ("method", "system", "patient"), or drop very short terms that are too ambiguous.
+
+In this project, the focal-term pipeline already does this implicitly: a term only becomes a focal term if it appears in **both** a patent and a cited paper, which naturally filters out most of the noise.
 
 ---
 
