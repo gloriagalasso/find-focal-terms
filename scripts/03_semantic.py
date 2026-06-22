@@ -164,7 +164,14 @@ t0 = time.time()
 
 # For each (patent, focal_term) pair, collect all OTHER terms in papers that cite that term.
 # This lets us compare what terms appear alongside the focal term in scientific papers.
-paper_context = (
+#
+# The join chain expands massively (each pmid → all its terms), so we sink the
+# intermediate to disk first, then aggregate from the smaller temp file.
+PAPER_CTX_TMP = OUT_DIR / "paper_context_tmp.parquet"
+if PAPER_CTX_TMP.exists():
+    PAPER_CTX_TMP.unlink()
+
+(
     focal_pairs
     .lazy()
     .join(link_clean.lazy(), on="patent_id", how="inner")
@@ -176,15 +183,20 @@ paper_context = (
     .select("patent_id", "focal_term", "pmid")
     .unique()
     .join(pmed_terms.lazy(), on="pmid", how="inner")
-    .filter(pl.col("term") != pl.col("focal_term"))  # Exclude focal term
+    .filter(pl.col("term") != pl.col("focal_term"))
+    .select("patent_id", "focal_term", "term")
+    .unique()
+    .sink_parquet(PAPER_CTX_TMP)
+)
+
+paper_context = (
+    pl.scan_parquet(PAPER_CTX_TMP)
     .group_by("patent_id", "focal_term")
-    .agg(
-        pl.col("term")
-        .unique()
-        .alias("paper_context")
-    )
+    .agg(pl.col("term").alias("paper_context"))
     .collect()
 )
+
+PAPER_CTX_TMP.unlink(missing_ok=True)
 
 print(f"  Built context for {len(paper_context):,} (patent, focal_term) pairs")
 print(f"  RAM usage: {paper_context.estimated_size('mb'):.2f} MB")
