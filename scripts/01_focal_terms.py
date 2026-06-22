@@ -18,7 +18,13 @@ PMED_PATH = DATA_DIR / "FullSampleGloria_Pmed_GlinerLabels_16042026.parquet"
 
 OUT_DIR    = BASE.parent / "output"
 OUT_DIR.mkdir(exist_ok=True)
+TMP_DIR    = OUT_DIR / "tmp_intermediate"
+TMP_DIR.mkdir(exist_ok=True)
 FINAL_PATH = OUT_DIR / "focal_terms_full.parquet"
+
+PAT_AGG_PATH  = TMP_DIR / "pat_term_counts.parquet"
+LINK_AGG_PATH = TMP_DIR / "link_clean.parquet"
+PMED_AGG_PATH = TMP_DIR / "pmed_term_counts.parquet"
 
 def elapsed(t0):
     s = time.time() - t0
@@ -33,20 +39,31 @@ if FINAL_PATH.exists():
 t0_all = time.time()
 
 # =========================
-# STEP 1: Build lazy query — each file scanned exactly once
+# STEP 1: Aggregate patent terms (one scan of Pat file)
 # =========================
-print("\nStep 1: Building query plan...")
+print("\nStep 1: Aggregating patent terms...")
 t0 = time.time()
 
-pat_terms = (
+(
     pl.scan_parquet(PAT_PATH)
     .select(["patent_id", "term"])
     .filter(pl.col("term").is_not_null())
     .group_by(["patent_id", "term"])
     .agg(pl.len().alias("freq_in_patent"))
+    .sink_parquet(PAT_AGG_PATH)
 )
 
-links = (
+n_pat = pl.scan_parquet(PAT_AGG_PATH).select(pl.len()).collect().item()
+print(f"  {n_pat:,} unique (patent, term) pairs")
+print(f"  Done in {elapsed(t0)}")
+
+# =========================
+# STEP 2: Clean links (one scan of Link file)
+# =========================
+print("\nStep 2: Cleaning patent-PMID links...")
+t0 = time.time()
+
+(
     pl.scan_parquet(LINK_PATH)
     .filter(pl.col("pmid").is_not_null())
     .with_columns(
@@ -59,23 +76,41 @@ links = (
     .filter(pl.col("pmid_num").is_not_null())
     .select(["patent_id", pl.col("pmid_num").alias("pmid")])
     .unique()
+    .sink_parquet(LINK_AGG_PATH)
 )
 
-pmed_terms = (
+n_links = pl.scan_parquet(LINK_AGG_PATH).select(pl.len()).collect().item()
+print(f"  {n_links:,} unique (patent, pmid) links")
+print(f"  Done in {elapsed(t0)}")
+
+# =========================
+# STEP 3: Aggregate PubMed terms (one scan of Pmed file)
+# =========================
+print("\nStep 3: Aggregating PubMed terms...")
+t0 = time.time()
+
+(
     pl.scan_parquet(PMED_PATH)
     .select([pl.col("pmid").cast(pl.Int64), "term"])
     .filter(pl.col("term").is_not_null())
     .group_by(["pmid", "term"])
     .agg(pl.len().alias("freq_in_paper"))
+    .sink_parquet(PMED_AGG_PATH)
 )
 
+n_pmed = pl.scan_parquet(PMED_AGG_PATH).select(pl.len()).collect().item()
+print(f"  {n_pmed:,} unique (pmid, term) pairs")
 print(f"  Done in {elapsed(t0)}")
 
 # =========================
-# STEP 2: Join and stream result to disk
+# STEP 4: Join intermediates and write focal terms
 # =========================
-print("\nStep 2: Computing focal terms (streaming)...")
+print("\nStep 4: Joining to find focal terms...")
 t0 = time.time()
+
+links = pl.scan_parquet(LINK_AGG_PATH)
+pmed_terms = pl.scan_parquet(PMED_AGG_PATH)
+pat_terms = pl.scan_parquet(PAT_AGG_PATH)
 
 focal = (
     links
