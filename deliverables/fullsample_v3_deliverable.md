@@ -94,7 +94,6 @@ The distribution is **right-skewed**: the majority of patents share a small numb
 | time | 28,895 |
 | compound | 28,163 |
 
-High-frequency terms (`method`, `cell`, `protein`) are generic biomedical vocabulary. More specific terms like `cancer`, `antibody`, `expression` (ranks 17-20) reveal the predominantly life-sciences character of the dataset.
 
 ---
 
@@ -117,8 +116,8 @@ We compare three embedding models to assess how model choice affects the measure
 | Model | Type | Training domain | Strengths |
 |---|---|---|---|
 | `all-MiniLM-L6-v2` | General-purpose | Web text (NLI + STS) | Fast, widely used baseline |
-| `BioLORD-2023` | Biomedical | UMLS ontology + PubMed | Biomedical concept relationships |
-| `S-PubMedBERT-MS-MARCO` | Biomedical | PubMed + MS MARCO | Biomedical retrieval tasks |
+| `FremyCompany/BioLORD-2023` | Biomedical | UMLS ontology + PubMed | Biomedical concept relationships |
+| `pritamdeka/S-PubMedBert-MS-MARCO` | Biomedical | PubMed + MS MARCO | Biomedical retrieval tasks |
 
 **Note on input format**: all three models embed concatenated term lists rather than natural language sentences. Sentence embedding models are trained on grammatical text, so feeding them word lists is suboptimal. A future improvement would be to embed actual patent claims and paper sentences containing the focal term.
 
