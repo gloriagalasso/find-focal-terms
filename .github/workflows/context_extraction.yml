@@ -1,0 +1,94 @@
+name: Context Extraction Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_size:
+        description: 'Number of focal term rows to process (0 = full dataset)'
+        required: false
+        default: '1000'
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install polars pyarrow boto3
+
+      - name: Download data from R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+        run: |
+          python - <<'PYEOF'
+          import boto3, os
+
+          s3 = boto3.client('s3',
+              endpoint_url=os.environ['R2_ENDPOINT'],
+              aws_access_key_id=os.environ['R2_ACCESS_KEY'],
+              aws_secret_access_key=os.environ['R2_SECRET_KEY'],
+          )
+
+          os.makedirs('data', exist_ok=True)
+
+          files = {
+              'outcomes/01_focal_terms_full.parquet': 'data/outcomes_01_focal_terms_full.parquet',
+              'FullSampleGloria_Link_PmidOa.parquet': 'data/FullSampleGloria_Link_PmidOa_16042026.parquet',
+              'A04_Abstract_filtered.parquet': 'data/A04_Abstract_filtered.parquet',
+              'C15_claims_1999.parquet': 'data/C15_claims_1999.parquet',
+              'C15_claims_2009.parquet': 'data/C15_claims_2009.parquet',
+              'C15_claims_2019.parquet': 'data/C15_claims_2019.parquet',
+              'C15_claims_2024.parquet': 'data/C15_claims_2024.parquet',
+          }
+
+          for r2_key, local_path in files.items():
+              print(f'Downloading {r2_key} → {local_path}')
+              s3.download_file('gloria-hiwi', r2_key, local_path)
+              size = os.path.getsize(local_path) / 1e6
+              print(f'  {size:.0f} MB')
+
+          print('All downloads complete!')
+          PYEOF
+
+      - name: Run context extraction
+        env:
+          SAMPLE_SIZE: ${{ github.event.inputs.sample_size }}
+        run: |
+          python scripts/04_context_extraction.py
+
+      - name: Upload results to R2
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+        run: |
+          python - <<'PYEOF'
+          import boto3, os
+
+          s3 = boto3.client('s3',
+              endpoint_url=os.environ['R2_ENDPOINT'],
+              aws_access_key_id=os.environ['R2_ACCESS_KEY'],
+              aws_secret_access_key=os.environ['R2_SECRET_KEY'],
+          )
+
+          uploads = {
+              'output/context_abstracts.parquet': 'outcomes/04_context_abstracts.parquet',
+              'output/context_claims.parquet': 'outcomes/04_context_claims.parquet',
+              'output/context_extraction.json': 'outcomes/04_context_extraction.json',
+          }
+
+          for local, r2_key in uploads.items():
+              if os.path.exists(local):
+                  print(f'Uploading {local} → {r2_key}')
+                  s3.upload_file(local, 'gloria-hiwi', r2_key)
+
+          print('Upload complete!')
+          PYEOF
