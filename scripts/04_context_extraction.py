@@ -152,28 +152,27 @@ claims = pl.concat(claims_list)
 del claims_list
 print(f"  {len(claims):,} claims loaded for {len(patent_ids_needed):,} patents")
 
-claims_by_patent: dict[str, str] = {}
+claims_by_patent: dict[str, list[str]] = {}
 for row in claims.iter_rows(named=True):
     pid = row["patent_id"]
-    if pid in claims_by_patent:
-        claims_by_patent[pid] += " " + row["claim_text"]
-    else:
-        claims_by_patent[pid] = row["claim_text"]
+    claims_by_patent.setdefault(pid, []).append(row["claim_text"])
 del claims
 
 results_claims = []
 for row in focal_patents.iter_rows(named=True):
-    text = claims_by_patent.get(row["patent_id"])
-    if not text:
+    claim_list = claims_by_patent.get(row["patent_id"])
+    if not claim_list:
         continue
-    context = extract_sentence_window(text, row["focal_term"])
-    if context:
-        results_claims.append({
-            "patent_id": row["patent_id"],
-            "focal_term": row["focal_term"],
-            "context": context,
-            "source": "claims",
-        })
+    term_lower = row["focal_term"].lower()
+    for claim_text in claim_list:
+        if term_lower in claim_text.lower():
+            results_claims.append({
+                "patent_id": row["patent_id"],
+                "focal_term": row["focal_term"],
+                "context": claim_text,
+                "source": "claims",
+            })
+            break
 
 df_claims = pl.DataFrame(results_claims)
 df_claims.write_parquet(CONTEXT_CLAIMS_PATH)
