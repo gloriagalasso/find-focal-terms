@@ -172,7 +172,6 @@ for row in focal_patents.iter_rows(named=True):
                 "context": claim_text,
                 "source": "claims",
             })
-            break
 
 df_claims = pl.DataFrame(results_claims)
 df_claims.write_parquet(CONTEXT_CLAIMS_PATH)
