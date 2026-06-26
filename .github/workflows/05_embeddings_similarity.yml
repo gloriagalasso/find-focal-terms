@@ -1,0 +1,98 @@
+name: Embeddings & Similarity Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      sample_size:
+        description: 'Number of abstract context rows to process (0 = full dataset)'
+        required: false
+        default: '1000'
+      batch_size:
+        description: 'Embedding batch size (lower = less memory)'
+        required: false
+        default: '32'
+
+concurrency:
+  group: embeddings-similarity
+  cancel-in-progress: false
+
+jobs:
+  embed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install polars pyarrow torch --index-url https://download.pytorch.org/whl/cpu
+          pip install transformers numpy boto3
+
+      - name: Download context data from R2
+        env:
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_ACCESS_SECRET: ${{ secrets.R2_ACCESS_SECRET }}
+        run: |
+          python - <<'PYEOF'
+          import boto3, os
+
+          s3 = boto3.client('s3',
+              endpoint_url='https://c6ec75bde4f8f0d307d63edb221db6a3.r2.cloudflarestorage.com',
+              aws_access_key_id=os.environ['R2_ACCESS_KEY'],
+              aws_secret_access_key=os.environ['R2_ACCESS_SECRET'],
+          )
+
+          os.makedirs('output', exist_ok=True)
+
+          files = {
+              'outcomes/04_context_abstracts.parquet': 'output/context_abstracts.parquet',
+              'outcomes/04_context_claims.parquet': 'output/context_claims.parquet',
+          }
+
+          for r2_key, local_path in files.items():
+              print(f'Downloading {r2_key} → {local_path}')
+              s3.download_file('gloria-hiwi', r2_key, local_path)
+              size = os.path.getsize(local_path) / 1e6
+              print(f'  {size:.0f} MB')
+
+          print('All downloads complete!')
+          PYEOF
+
+      - name: Run embeddings & similarity
+        env:
+          SAMPLE_SIZE: ${{ github.event.inputs.sample_size }}
+          EMBED_BATCH_SIZE: ${{ github.event.inputs.batch_size }}
+        run: |
+          python scripts/05_embeddings_similarity.py
+
+      - name: Upload results to R2
+        env:
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_ACCESS_SECRET: ${{ secrets.R2_ACCESS_SECRET }}
+        run: |
+          python - <<'PYEOF'
+          import boto3, os
+
+          s3 = boto3.client('s3',
+              endpoint_url='https://c6ec75bde4f8f0d307d63edb221db6a3.r2.cloudflarestorage.com',
+              aws_access_key_id=os.environ['R2_ACCESS_KEY'],
+              aws_secret_access_key=os.environ['R2_ACCESS_SECRET'],
+          )
+
+          uploads = {
+              'output/similarity_scores.parquet': 'outcomes/05_similarity_scores.parquet',
+              'output/similarity_aggregate.parquet': 'outcomes/05_similarity_aggregate.parquet',
+              'output/embeddings_similarity.json': 'outcomes/05_embeddings_similarity.json',
+          }
+
+          for local, r2_key in uploads.items():
+              if os.path.exists(local):
+                  print(f'Uploading {local} → {r2_key}')
+                  s3.upload_file(local, 'gloria-hiwi', r2_key)
+
+          print('Upload complete!')
+          PYEOF
