@@ -8,11 +8,16 @@ on:
         required: false
         default: '1000'
 
+concurrency:
+  group: context-extraction
+  cancel-in-progress: false
+
 jobs:
   extract:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v5
         with:
