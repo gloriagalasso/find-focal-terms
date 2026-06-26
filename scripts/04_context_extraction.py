@@ -66,8 +66,11 @@ print(f"  {len(focal):,} focal term rows | {elapsed(t0)}")
 print("\nStep 2: Building patent-PMID mapping...")
 t0 = time.time()
 
+patent_ids_needed = set(focal["patent_id"].unique().to_list())
+
 link = (
     pl.scan_parquet(LINK_PATH)
+    .filter(pl.col("patent_id").is_in(patent_ids_needed))
     .filter(pl.col("pmid").is_not_null())
     .with_columns(
         pl.col("pmid").cast(pl.String).str.extract(r"(\d+)$", 1).cast(pl.Int64).alias("pmid_int")
@@ -78,8 +81,6 @@ link = (
     .collect()
 )
 
-patent_ids_needed = set(focal["patent_id"].unique().to_list())
-link = link.filter(pl.col("patent_id").is_in(patent_ids_needed))
 print(f"  {len(link):,} patent-PMID pairs | {elapsed(t0)}")
 
 # =========================
@@ -95,18 +96,19 @@ focal_with_pmid = (
 print(f"  {len(focal_with_pmid):,} (patent, term, pmid) triples to search")
 
 pmids_needed = set(focal_with_pmid["pmid_int"].unique().to_list())
-abstracts = (
-    pl.read_parquet(ABSTRACT_PATH)
-    .filter(pl.col("PMID").is_in(pmids_needed))
-)
-print(f"  {len(abstracts):,} abstracts loaded")
 
-abstract_map = {
-    row["PMID"]: row["AbstractText"]
-    for row in abstracts.iter_rows(named=True)
-    if row["AbstractText"]
-}
-del abstracts
+# Stream abstracts in batches instead of loading all into memory
+BATCH_SIZE = 50_000
+abstract_map: dict[int, str] = {}
+for batch in pl.read_parquet_batched(ABSTRACT_PATH, batch_size=BATCH_SIZE):
+    if batch is None:
+        break
+    batch_filtered = batch.filter(pl.col("PMID").is_in(pmids_needed))
+    for row in batch_filtered.iter_rows(named=True):
+        if row["AbstractText"]:
+            abstract_map[row["PMID"]] = row["AbstractText"]
+
+print(f"  {len(abstract_map):,} abstracts loaded")
 
 results_abstract = []
 for row in focal_with_pmid.iter_rows(named=True):
@@ -135,43 +137,38 @@ del focal_with_pmid, abstract_map, results_abstract
 print("\nStep 4: Extracting context from patent claims...")
 t0 = time.time()
 
-focal_patents = focal.select("patent_id", "focal_term").unique()
+focal_terms_by_patent: dict[str, list[str]] = {}
+for row in focal.select("patent_id", "focal_term").unique().iter_rows(named=True):
+    focal_terms_by_patent.setdefault(row["patent_id"], []).append(row["focal_term"])
 
-claims_list = []
+results_claims = []
+
+# Process one claims file at a time, never holding all in memory
 for p in CLAIMS_PATHS:
-    print(f"  Reading {p.name}...")
-    c = (
+    print(f"  Processing {p.name}...")
+    claims = (
         pl.scan_parquet(p)
         .filter(pl.col("patent_id").is_in(patent_ids_needed))
         .select("patent_id", "claim_text")
         .collect()
     )
-    claims_list.append(c)
 
-claims = pl.concat(claims_list)
-del claims_list
-print(f"  {len(claims):,} claims loaded for {len(patent_ids_needed):,} patents")
+    for row in claims.iter_rows(named=True):
+        terms = focal_terms_by_patent.get(row["patent_id"])
+        if not terms:
+            continue
+        claim_lower = row["claim_text"].lower()
+        for term in terms:
+            if term.lower() in claim_lower:
+                results_claims.append({
+                    "patent_id": row["patent_id"],
+                    "focal_term": term,
+                    "context": row["claim_text"],
+                    "source": "claims",
+                })
 
-claims_by_patent: dict[str, list[str]] = {}
-for row in claims.iter_rows(named=True):
-    pid = row["patent_id"]
-    claims_by_patent.setdefault(pid, []).append(row["claim_text"])
-del claims
-
-results_claims = []
-for row in focal_patents.iter_rows(named=True):
-    claim_list = claims_by_patent.get(row["patent_id"])
-    if not claim_list:
-        continue
-    term_lower = row["focal_term"].lower()
-    for claim_text in claim_list:
-        if term_lower in claim_text.lower():
-            results_claims.append({
-                "patent_id": row["patent_id"],
-                "focal_term": row["focal_term"],
-                "context": claim_text,
-                "source": "claims",
-            })
+    del claims
+    print(f"    done, {len(results_claims):,} matches so far")
 
 df_claims = pl.DataFrame(results_claims)
 df_claims.write_parquet(CONTEXT_CLAIMS_PATH)
