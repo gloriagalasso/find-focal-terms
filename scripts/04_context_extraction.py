@@ -97,16 +97,17 @@ print(f"  {len(focal_with_pmid):,} (patent, term, pmid) triples to search")
 
 pmids_needed = set(focal_with_pmid["pmid_int"].unique().to_list())
 
-# Stream abstracts in batches instead of loading all into memory
-BATCH_SIZE = 50_000
 abstract_map: dict[int, str] = {}
-for batch in pl.read_parquet_batched(ABSTRACT_PATH, batch_size=BATCH_SIZE):
-    if batch is None:
-        break
-    batch_filtered = batch.filter(pl.col("PMID").is_in(pmids_needed))
-    for row in batch_filtered.iter_rows(named=True):
-        if row["AbstractText"]:
-            abstract_map[row["PMID"]] = row["AbstractText"]
+abstracts = (
+    pl.scan_parquet(ABSTRACT_PATH)
+    .filter(pl.col("PMID").is_in(pmids_needed))
+    .filter(pl.col("AbstractText").is_not_null())
+    .select("PMID", "AbstractText")
+    .collect()
+)
+for row in abstracts.iter_rows(named=True):
+    abstract_map[row["PMID"]] = row["AbstractText"]
+del abstracts
 
 print(f"  {len(abstract_map):,} abstracts loaded")
 
