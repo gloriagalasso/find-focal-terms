@@ -89,58 +89,66 @@ print(f"  {len(link):,} patent-PMID pairs | {elapsed(t0)}")
 print("\nStep 3: Extracting context from abstracts...")
 t0 = time.time()
 
-focal_with_pmid = (
-    focal.select("patent_id", "focal_term")
-    .join(link, on="patent_id", how="inner")
-)
-print(f"  {len(focal_with_pmid):,} (patent, term, pmid) triples to search")
+# Build lightweight dicts instead of a 235M-row join
+focal_terms_by_patent: dict[str, list[str]] = {}
+for row in focal.select("patent_id", "focal_term").unique().iter_rows(named=True):
+    focal_terms_by_patent.setdefault(row["patent_id"], []).append(row["focal_term"])
 
-pmids_needed = set(focal_with_pmid["pmid_int"].unique().to_list())
+pmids_by_patent: dict[str, list[int]] = {}
+for row in link.iter_rows(named=True):
+    pmids_by_patent.setdefault(row["patent_id"], []).append(row["pmid_int"])
+del link
+
+all_pmids = set()
+for pmid_list in pmids_by_patent.values():
+    all_pmids.update(pmid_list)
+
+print(f"  {len(focal_terms_by_patent):,} patents, {len(all_pmids):,} unique PMIDs to search")
 
 abstract_map: dict[int, str] = {}
 abstracts = (
     pl.scan_parquet(ABSTRACT_PATH)
-    .filter(pl.col("PMID").is_in(pmids_needed))
+    .filter(pl.col("PMID").is_in(all_pmids))
     .filter(pl.col("AbstractText").is_not_null())
     .select("PMID", "AbstractText")
     .collect()
 )
 for row in abstracts.iter_rows(named=True):
     abstract_map[row["PMID"]] = row["AbstractText"]
-del abstracts
-
+del abstracts, all_pmids
 print(f"  {len(abstract_map):,} abstracts loaded")
 
 results_abstract = []
-for row in focal_with_pmid.iter_rows(named=True):
-    text = abstract_map.get(row["pmid_int"])
-    if not text:
+for patent_id, terms in focal_terms_by_patent.items():
+    pmids = pmids_by_patent.get(patent_id)
+    if not pmids:
         continue
-    context = extract_sentence_window(text, row["focal_term"])
-    if context:
-        results_abstract.append({
-            "patent_id": row["patent_id"],
-            "focal_term": row["focal_term"],
-            "pmid": row["pmid_int"],
-            "context": context,
-            "source": "abstract",
-        })
+    for pmid in pmids:
+        text = abstract_map.get(pmid)
+        if not text:
+            continue
+        for term in terms:
+            context = extract_sentence_window(text, term)
+            if context:
+                results_abstract.append({
+                    "patent_id": patent_id,
+                    "focal_term": term,
+                    "pmid": pmid,
+                    "context": context,
+                    "source": "abstract",
+                })
 
 df_abstract = pl.DataFrame(results_abstract)
 df_abstract.write_parquet(CONTEXT_ABSTRACT_PATH)
 print(f"  {len(df_abstract):,} abstract contexts extracted | {elapsed(t0)}")
 
-del focal_with_pmid, abstract_map, results_abstract
+del abstract_map, results_abstract, pmids_by_patent
 
 # =========================
 # STEP 4: Extract context from patent claims
 # =========================
 print("\nStep 4: Extracting context from patent claims...")
 t0 = time.time()
-
-focal_terms_by_patent: dict[str, list[str]] = {}
-for row in focal.select("patent_id", "focal_term").unique().iter_rows(named=True):
-    focal_terms_by_patent.setdefault(row["patent_id"], []).append(row["focal_term"])
 
 results_claims = []
 
