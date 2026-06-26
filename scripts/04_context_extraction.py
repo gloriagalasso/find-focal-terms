@@ -1,11 +1,14 @@
 import os
-os.environ.setdefault("POLARS_MAX_THREADS", "4")
+os.environ.setdefault("POLARS_MAX_THREADS", "2")
 
+import gc
 import re
 import time
 import json
 from pathlib import Path
 import polars as pl
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 # =========================
 # CONFIGURATION
@@ -24,6 +27,22 @@ CONTEXT_ABSTRACT_PATH = OUT_DIR / "context_abstracts.parquet"
 CONTEXT_CLAIMS_PATH   = OUT_DIR / "context_claims.parquet"
 
 SAMPLE_SIZE = int(os.environ.get("SAMPLE_SIZE", "0"))
+CHUNK_SIZE  = 50_000
+
+ABSTRACT_SCHEMA = pa.schema([
+    ("patent_id", pa.string()),
+    ("focal_term", pa.string()),
+    ("pmid", pa.int64()),
+    ("context", pa.string()),
+    ("source", pa.string()),
+])
+CLAIMS_SCHEMA = pa.schema([
+    ("patent_id", pa.string()),
+    ("focal_term", pa.string()),
+    ("context", pa.string()),
+    ("source", pa.string()),
+])
+
 
 def elapsed(t0):
     s = time.time() - t0
@@ -31,7 +50,6 @@ def elapsed(t0):
 
 
 def extract_sentence_window(text: str, term: str, window: int = 1) -> str | None:
-    """Extract the sentence containing `term` plus `window` sentences before/after."""
     if not text or not term:
         return None
     sentences = re.split(r'(?<=[.!?])\s+', text.strip())
@@ -44,21 +62,41 @@ def extract_sentence_window(text: str, term: str, window: int = 1) -> str | None
     return None
 
 
+def flush_to_parquet(writer, results, schema):
+    if not results:
+        return
+    table = pa.table({col: [r[col] for r in results] for col in schema.names}, schema=schema)
+    writer.write_table(table)
+    del table
+
+
 print("=== TASK 4: Context Extraction ===")
 t0_all = time.time()
 
 # =========================
-# STEP 1: Load focal terms
+# STEP 1: Load focal terms (only needed columns)
 # =========================
 print("\nStep 1: Loading focal terms...")
 t0 = time.time()
 
-focal = pl.read_parquet(FOCAL_PATH)
+focal = pl.read_parquet(FOCAL_PATH, columns=["patent_id", "focal_term"])
 if SAMPLE_SIZE > 0:
     focal = focal.head(SAMPLE_SIZE)
     print(f"  SAMPLE MODE: using {SAMPLE_SIZE} rows")
 
 print(f"  {len(focal):,} focal term rows | {elapsed(t0)}")
+
+# Build patent_id → [focal_terms] dict, then free the dataframe
+focal_terms_by_patent: dict[str, list[str]] = {}
+for row in focal.unique().iter_rows(named=True):
+    focal_terms_by_patent.setdefault(row["patent_id"], []).append(row["focal_term"])
+
+patent_ids_needed = set(focal_terms_by_patent.keys())
+n_focal = len(focal)
+del focal
+gc.collect()
+
+print(f"  {len(patent_ids_needed):,} unique patents")
 
 # =========================
 # STEP 2: Build patent_id → PMID mapping
@@ -66,8 +104,7 @@ print(f"  {len(focal):,} focal term rows | {elapsed(t0)}")
 print("\nStep 2: Building patent-PMID mapping...")
 t0 = time.time()
 
-patent_ids_needed = set(focal["patent_id"].unique().to_list())
-
+pmids_by_patent: dict[str, list[int]] = {}
 link = (
     pl.scan_parquet(LINK_PATH)
     .filter(pl.col("patent_id").is_in(patent_ids_needed))
@@ -80,30 +117,22 @@ link = (
     .unique()
     .collect()
 )
-
-print(f"  {len(link):,} patent-PMID pairs | {elapsed(t0)}")
-
-# =========================
-# STEP 3: Extract context from abstracts
-# =========================
-print("\nStep 3: Extracting context from abstracts...")
-t0 = time.time()
-
-# Build lightweight dicts instead of a 235M-row join
-focal_terms_by_patent: dict[str, list[str]] = {}
-for row in focal.select("patent_id", "focal_term").unique().iter_rows(named=True):
-    focal_terms_by_patent.setdefault(row["patent_id"], []).append(row["focal_term"])
-
-pmids_by_patent: dict[str, list[int]] = {}
 for row in link.iter_rows(named=True):
     pmids_by_patent.setdefault(row["patent_id"], []).append(row["pmid_int"])
 del link
+gc.collect()
 
 all_pmids = set()
 for pmid_list in pmids_by_patent.values():
     all_pmids.update(pmid_list)
 
-print(f"  {len(focal_terms_by_patent):,} patents, {len(all_pmids):,} unique PMIDs to search")
+print(f"  {len(pmids_by_patent):,} patents with PMIDs, {len(all_pmids):,} unique PMIDs | {elapsed(t0)}")
+
+# =========================
+# STEP 3: Extract context from abstracts (streamed to disk)
+# =========================
+print("\nStep 3: Extracting context from abstracts...")
+t0 = time.time()
 
 abstract_map: dict[int, str] = {}
 abstracts = (
@@ -116,9 +145,13 @@ abstracts = (
 for row in abstracts.iter_rows(named=True):
     abstract_map[row["PMID"]] = row["AbstractText"]
 del abstracts, all_pmids
+gc.collect()
 print(f"  {len(abstract_map):,} abstracts loaded")
 
-results_abstract = []
+count_abstract = 0
+writer_abs = pq.ParquetWriter(CONTEXT_ABSTRACT_PATH, ABSTRACT_SCHEMA)
+buffer = []
+
 for patent_id, terms in focal_terms_by_patent.items():
     pmids = pmids_by_patent.get(patent_id)
     if not pmids:
@@ -130,29 +163,37 @@ for patent_id, terms in focal_terms_by_patent.items():
         for term in terms:
             context = extract_sentence_window(text, term)
             if context:
-                results_abstract.append({
+                buffer.append({
                     "patent_id": patent_id,
                     "focal_term": term,
                     "pmid": pmid,
                     "context": context,
                     "source": "abstract",
                 })
+    if len(buffer) >= CHUNK_SIZE:
+        flush_to_parquet(writer_abs, buffer, ABSTRACT_SCHEMA)
+        count_abstract += len(buffer)
+        buffer.clear()
 
-df_abstract = pl.DataFrame(results_abstract)
-df_abstract.write_parquet(CONTEXT_ABSTRACT_PATH)
-print(f"  {len(df_abstract):,} abstract contexts extracted | {elapsed(t0)}")
+flush_to_parquet(writer_abs, buffer, ABSTRACT_SCHEMA)
+count_abstract += len(buffer)
+buffer.clear()
+writer_abs.close()
 
-del abstract_map, results_abstract, pmids_by_patent
+del abstract_map, pmids_by_patent
+gc.collect()
+
+print(f"  {count_abstract:,} abstract contexts extracted | {elapsed(t0)}")
 
 # =========================
-# STEP 4: Extract context from patent claims
+# STEP 4: Extract context from patent claims (streamed to disk)
 # =========================
 print("\nStep 4: Extracting context from patent claims...")
 t0 = time.time()
 
-results_claims = []
+count_claims = 0
+writer_cl = pq.ParquetWriter(CONTEXT_CLAIMS_PATH, CLAIMS_SCHEMA)
 
-# Process one claims file at a time, never holding all in memory
 for p in CLAIMS_PATHS:
     print(f"  Processing {p.name}...")
     claims = (
@@ -162,6 +203,7 @@ for p in CLAIMS_PATHS:
         .collect()
     )
 
+    buffer = []
     for row in claims.iter_rows(named=True):
         terms = focal_terms_by_patent.get(row["patent_id"])
         if not terms:
@@ -169,33 +211,40 @@ for p in CLAIMS_PATHS:
         claim_lower = row["claim_text"].lower()
         for term in terms:
             if term.lower() in claim_lower:
-                results_claims.append({
+                buffer.append({
                     "patent_id": row["patent_id"],
                     "focal_term": term,
                     "context": row["claim_text"],
                     "source": "claims",
                 })
+        if len(buffer) >= CHUNK_SIZE:
+            flush_to_parquet(writer_cl, buffer, CLAIMS_SCHEMA)
+            count_claims += len(buffer)
+            buffer.clear()
 
+    flush_to_parquet(writer_cl, buffer, CLAIMS_SCHEMA)
+    count_claims += len(buffer)
+    buffer.clear()
     del claims
-    print(f"    done, {len(results_claims):,} matches so far")
+    gc.collect()
+    print(f"    done, {count_claims:,} total matches so far")
 
-df_claims = pl.DataFrame(results_claims)
-df_claims.write_parquet(CONTEXT_CLAIMS_PATH)
-print(f"  {len(df_claims):,} claim contexts extracted | {elapsed(t0)}")
+writer_cl.close()
+print(f"  {count_claims:,} claim contexts extracted | {elapsed(t0)}")
 
 # =========================
 # STEP 5: Summary
 # =========================
 print(f"\n{'='*60}")
 print(f"TASK 4 COMPLETE | Total time: {elapsed(t0_all)}")
-print(f"  Abstract contexts: {len(df_abstract):,} → {CONTEXT_ABSTRACT_PATH}")
-print(f"  Claims contexts:   {len(df_claims):,} → {CONTEXT_CLAIMS_PATH}")
+print(f"  Abstract contexts: {count_abstract:,} → {CONTEXT_ABSTRACT_PATH}")
+print(f"  Claims contexts:   {count_claims:,} → {CONTEXT_CLAIMS_PATH}")
 print(f"{'='*60}")
 
 stats = {
-    "abstract_contexts": len(df_abstract),
-    "claims_contexts": len(df_claims),
-    "focal_terms_input": len(focal),
+    "abstract_contexts": count_abstract,
+    "claims_contexts": count_claims,
+    "focal_terms_input": n_focal,
     "sample_size": SAMPLE_SIZE if SAMPLE_SIZE > 0 else "full",
 }
 (OUT_DIR / "context_extraction.json").write_text(json.dumps(stats, indent=2))
