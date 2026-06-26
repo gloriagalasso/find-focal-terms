@@ -39,6 +39,7 @@ ABSTRACT_SCHEMA = pa.schema([
 CLAIMS_SCHEMA = pa.schema([
     ("patent_id", pa.string()),
     ("focal_term", pa.string()),
+    ("claim_number", pa.int32()),
     ("context", pa.string()),
     ("source", pa.string()),
 ])
@@ -191,19 +192,18 @@ print(f"  {count_abstract:,} abstract contexts extracted | {elapsed(t0)}")
 print("\nStep 4: Extracting context from patent claims...")
 t0 = time.time()
 
-count_claims = 0
-writer_cl = pq.ParquetWriter(CONTEXT_CLAIMS_PATH, CLAIMS_SCHEMA)
+# Keep only the longest claim per (patent_id, focal_term)
+best_claim: dict[tuple[str, str], tuple[str, int]] = {}
 
 for p in CLAIMS_PATHS:
     print(f"  Processing {p.name}...")
     claims = (
         pl.scan_parquet(p)
         .filter(pl.col("patent_id").is_in(patent_ids_needed))
-        .select("patent_id", "claim_text")
+        .select("patent_id", "claim_text", "claim_number")
         .collect()
     )
 
-    buffer = []
     for row in claims.iter_rows(named=True):
         terms = focal_terms_by_patent.get(row["patent_id"])
         if not terms:
@@ -211,26 +211,40 @@ for p in CLAIMS_PATHS:
         claim_lower = row["claim_text"].lower()
         for term in terms:
             if term.lower() in claim_lower:
-                buffer.append({
-                    "patent_id": row["patent_id"],
-                    "focal_term": term,
-                    "context": row["claim_text"],
-                    "source": "claims",
-                })
-        if len(buffer) >= CHUNK_SIZE:
-            flush_to_parquet(writer_cl, buffer, CLAIMS_SCHEMA)
-            count_claims += len(buffer)
-            buffer.clear()
+                key = (row["patent_id"], term)
+                prev = best_claim.get(key)
+                if prev is None or len(row["claim_text"]) > len(prev[0]):
+                    best_claim[key] = (row["claim_text"], row["claim_number"])
 
-    flush_to_parquet(writer_cl, buffer, CLAIMS_SCHEMA)
-    count_claims += len(buffer)
-    buffer.clear()
     del claims
     gc.collect()
-    print(f"    done, {count_claims:,} total matches so far")
+    print(f"    done, {len(best_claim):,} unique (patent, term) pairs so far")
 
+count_claims = 0
+writer_cl = pq.ParquetWriter(CONTEXT_CLAIMS_PATH, CLAIMS_SCHEMA)
+buffer = []
+
+for (patent_id, focal_term), (context, claim_number) in best_claim.items():
+    buffer.append({
+        "patent_id": patent_id,
+        "focal_term": focal_term,
+        "claim_number": claim_number,
+        "context": context,
+        "source": "claims",
+    })
+    if len(buffer) >= CHUNK_SIZE:
+        flush_to_parquet(writer_cl, buffer, CLAIMS_SCHEMA)
+        count_claims += len(buffer)
+        buffer.clear()
+
+flush_to_parquet(writer_cl, buffer, CLAIMS_SCHEMA)
+count_claims += len(buffer)
+buffer.clear()
 writer_cl.close()
-print(f"  {count_claims:,} claim contexts extracted | {elapsed(t0)}")
+del best_claim
+gc.collect()
+
+print(f"  {count_claims:,} claim contexts (one per patent-term) | {elapsed(t0)}")
 
 # =========================
 # STEP 5: Summary
