@@ -23,9 +23,19 @@ OUT_DIR.mkdir(exist_ok=True)
 
 CONTEXT_ABSTRACT_PATH = OUT_DIR / "context_abstracts.parquet"
 CONTEXT_CLAIMS_PATH   = OUT_DIR / "context_claims.parquet"
-SIMILARITY_PATH       = OUT_DIR / "similarity_scores.parquet"
 
-MODEL_NAME  = "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext"
+MODELS = {
+    "pubmedbert": "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext",
+    "biolord":    "FremyCompany/BioLORD-2023-C",
+}
+
+MODEL_KEY   = os.environ.get("MODEL", "pubmedbert").lower()
+MODEL_NAME  = MODELS[MODEL_KEY]
+MODEL_TAG   = MODEL_KEY
+
+SIMILARITY_PATH = OUT_DIR / f"similarity_scores_{MODEL_TAG}.parquet"
+AGGREGATE_PATH  = OUT_DIR / f"similarity_aggregate_{MODEL_TAG}.parquet"
+
 BATCH_SIZE  = int(os.environ.get("EMBED_BATCH_SIZE", "64"))
 SAMPLE_SIZE = int(os.environ.get("SAMPLE_SIZE", "0"))
 DEVICE      = "cuda" if torch.cuda.is_available() else "cpu"
@@ -57,22 +67,24 @@ def encode_texts(texts: list[str], tokenizer, model) -> np.ndarray:
             return_tensors="pt",
         ).to(DEVICE)
         outputs = model(**encoded)
-        # CLS token embedding
-        embs = outputs.last_hidden_state[:, 0, :].cpu().numpy()
+        # Mean pooling (masked to ignore padding tokens)
+        mask = encoded["attention_mask"].unsqueeze(-1).float()
+        summed = (outputs.last_hidden_state * mask).sum(dim=1)
+        embs = (summed / mask.sum(dim=1)).cpu().numpy()
         all_embeddings.append(embs)
-        del encoded, outputs
+        del encoded, outputs, mask, summed
         if DEVICE == "cuda":
             torch.cuda.empty_cache()
     return np.vstack(all_embeddings)
 
 
-print("=== TASK 5: Embeddings & Pairwise Similarity ===")
+print(f"=== TASK 5: Embeddings & Pairwise Similarity ({MODEL_TAG}) ===")
 t0_all = time.time()
 
 # =========================
 # STEP 1: Load model
 # =========================
-print("\nStep 1: Loading PubMedBERT...")
+print(f"\nStep 1: Loading {MODEL_TAG}...")
 t0 = time.time()
 tokenizer, model = load_model(MODEL_NAME)
 print(f"  Model loaded | {elapsed(t0)}")
@@ -203,8 +215,6 @@ print(f"  {n_pairs:,} pairwise similarities computed | {elapsed(t0)}")
 print("\nStep 6: Computing aggregate similarity metrics...")
 t0 = time.time()
 
-AGGREGATE_PATH = OUT_DIR / "similarity_aggregate.parquet"
-
 sim_df = pl.read_parquet(SIMILARITY_PATH)
 
 agg = (
@@ -242,4 +252,4 @@ stats = {
     "aggregate_groups": len(agg),
     "sample_size": SAMPLE_SIZE if SAMPLE_SIZE > 0 else "full",
 }
-(OUT_DIR / "embeddings_similarity.json").write_text(json.dumps(stats, indent=2))
+(OUT_DIR / f"embeddings_similarity_{MODEL_TAG}.json").write_text(json.dumps(stats, indent=2))

@@ -3,6 +3,14 @@ name: Embeddings & Similarity Pipeline
 on:
   workflow_dispatch:
     inputs:
+      model:
+        description: 'Model to use (pubmedbert or biolord)'
+        required: false
+        default: 'pubmedbert'
+        type: choice
+        options:
+          - pubmedbert
+          - biolord
       sample_size:
         description: 'Number of abstract context rows to process (0 = full dataset)'
         required: false
@@ -13,7 +21,7 @@ on:
         default: '32'
 
 concurrency:
-  group: embeddings-similarity
+  group: embeddings-similarity-${{ github.event.inputs.model }}
   cancel-in-progress: false
 
 jobs:
@@ -62,8 +70,9 @@ jobs:
           print('All downloads complete!')
           PYEOF
 
-      - name: Run embeddings & similarity
+      - name: Run embeddings & similarity (${{ github.event.inputs.model }})
         env:
+          MODEL: ${{ github.event.inputs.model }}
           SAMPLE_SIZE: ${{ github.event.inputs.sample_size }}
           EMBED_BATCH_SIZE: ${{ github.event.inputs.batch_size }}
         run: |
@@ -73,9 +82,12 @@ jobs:
         env:
           R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
           R2_ACCESS_SECRET: ${{ secrets.R2_ACCESS_SECRET }}
+          MODEL: ${{ github.event.inputs.model }}
         run: |
           python - <<'PYEOF'
           import boto3, os
+
+          model = os.environ['MODEL']
 
           s3 = boto3.client('s3',
               endpoint_url='https://c6ec75bde4f8f0d307d63edb221db6a3.r2.cloudflarestorage.com',
@@ -84,9 +96,9 @@ jobs:
           )
 
           uploads = {
-              'output/similarity_scores.parquet': 'outcomes/05_similarity_scores.parquet',
-              'output/similarity_aggregate.parquet': 'outcomes/05_similarity_aggregate.parquet',
-              'output/embeddings_similarity.json': 'outcomes/05_embeddings_similarity.json',
+              f'output/similarity_scores_{model}.parquet': f'outcomes/05_similarity_scores_{model}.parquet',
+              f'output/similarity_aggregate_{model}.parquet': f'outcomes/05_similarity_aggregate_{model}.parquet',
+              f'output/embeddings_similarity_{model}.json': f'outcomes/05_embeddings_similarity_{model}.json',
           }
 
           for local, r2_key in uploads.items():
