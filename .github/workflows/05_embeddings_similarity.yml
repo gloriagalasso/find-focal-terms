@@ -29,8 +29,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install polars pyarrow torch --index-url https://download.pytorch.org/whl/cpu
-          pip install transformers numpy boto3
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install polars pyarrow transformers numpy boto3
 
       - name: Download context data from R2
         env:
