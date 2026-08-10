@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GLiNER vs. BioRED — POS Error Analysis</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'media',
+    theme: {
+      extend: {
+        colors: {
+          surface: { DEFAULT: '#fcfcfb', dark: '#1a1a19' },
+          plane: { DEFAULT: '#f9f9f7', dark: '#0d0d0d' },
+        },
+        fontFamily: {
+          mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/markdown-it@14/dist/markdown-it.min.js"></script>
+
+<style>
+  body { background: #f9f9f7; }
+  @media (prefers-color-scheme: dark) { body { background: #0d0d0d; } }
+  .prose-custom :where(p) { margin: 0 0 0.75em; line-height: 1.6; }
+  .prose-custom :where(strong) { font-weight: 600; }
+  .prose-custom :where(code) { font-family: ui-monospace, monospace; font-size: 0.92em; background: rgba(120,120,120,0.14); padding: 0.1em 0.35em; border-radius: 4px; }
+  .prose-custom :where(ul) { margin: 0 0 0.75em; padding-left: 1.3em; list-style: disc; }
+  .prose-custom :where(li) { margin: 0.2em 0; line-height: 1.55; }
+  .prose-custom :where(em) { font-style: italic; }
+  .chart-wrap { position: relative; width: 100%; }
+</style>
+</head>
+<body class="text-neutral-900 dark:text-neutral-100">
+
+<div id="app"></div>
+
+<script>
+/* =========================================================================
+   DATA — pulled directly from pos_analysis_summary.json / pos_analysis_test_500.csv
+   (48 matched BioRED docs vs FullSampleGloria_Pmed_GlinerLabels.parquet, PMID join)
+   ========================================================================= */
+const DATA = {
+  scope: {
+    matchedDocs: 48,
+    totalGold: 1783,
+    biored: { train: 400, dev: 100, test: 100, total: 600 },
+    glinerUniquePmids: 881341,
+  },
+  eval: {
+    exact: { TP: 161, FP: 1915, FN: 1622, P: 0.0776, R: 0.0903, F1: 0.0834 },
+    partial: { TP: 317, FP: 1759, FN: 1466, P: 0.1527, R: 0.1778, F1: 0.1643 },
+  },
+  matchDistribution: [
+    { label: 'Exact match', value: 161, pct: 9.03 },
+    { label: 'Partial match', value: 156, pct: 8.75 },
+    { label: 'Unmatched (missed)', value: 1466, pct: 82.22 },
+  ],
+  boundaryDirection: [
+    { label: 'RIGHT trimmed', value: 73, pct: 46.79 },
+    { label: 'LEFT trimmed', value: 45, pct: 28.85 },
+    { label: 'BOTH sides', value: 38, pct: 24.36 },
+  ],
+  posOmitted: [
+    { pos: 'NOUN', left: 67, right: 115 },
+    { pos: 'ADJ', left: 34, right: 11 },
+    { pos: 'PUNCT', left: 14, right: 10 },
+    { pos: 'NUM', left: 6, right: 21 },
+    { pos: 'CCONJ', left: 4, right: 7 },
+    { pos: 'PART', left: 7, right: 0 },
+    { pos: 'ADP', left: 2, right: 9 },
+    { pos: 'VERB', left: 2, right: 1 },
+    { pos: 'PROPN', left: 2, right: 1 },
+  ],
+  entityRecall: [
+    { type: 'DiseaseOrPhenotypicFeature', total: 462, exact: 58, partial: 65, recall: 26.6 },
+    { type: 'ChemicalEntity', total: 399, exact: 57, partial: 23, recall: 20.1 },
+    { type: 'OrganismTaxon', total: 204, exact: 19, partial: 11, recall: 14.7 },
+    { type: 'GeneOrGeneProduct', total: 555, exact: 25, partial: 44, recall: 12.4 },
+    { type: 'SequenceVariant', total: 126, exact: 2, partial: 13, recall: 11.9 },
+    { type: 'CellLine', total: 37, exact: 0, partial: 0, recall: 0.0 },
+  ],
+  transformations: [
+    { pattern: 'NOUN NOUN → NOUN', count: 30 },
+    { pattern: 'ADJ NOUN → ADJ', count: 17 },
+    { pattern: 'NOUN → NOUN', count: 11 },
+    { pattern: 'ADJ → ADJ', count: 11 },
+    { pattern: 'ADJ NOUN → NOUN', count: 11 },
+    { pattern: 'ADJ NOUN NOUN → NOUN', count: 9 },
+    { pattern: 'NOUN NOUN NOUN → NOUN', count: 7 },
+    { pattern: 'NOUN PART NOUN → NOUN', count: 4 },
+  ],
+  examplesRight: [
+    { gold: 'thiazide-sensitive Na(+)-Cl(-) cotransporter', pred: 'thiazide-sensitive', pos: 'NOUN PUNCT NOUN' },
+    { gold: 'epithelial Na channel (ENaC) subunit', pred: 'epithelial', pos: 'PROPN NOUN PUNCT NOUN PUNCT NOUN' },
+    { gold: 'myocardial dysfunction', pred: 'myocardial', pos: 'NOUN' },
+    { gold: 'rhesus monkeys', pred: 'rhesus', pos: 'NOUN' },
+    { gold: 'dengue virus type 2', pred: 'dengue', pos: 'NOUN NOUN NUM' },
+    { gold: 'breast cancer', pred: 'breast', pos: 'NOUN' },
+    { gold: 'colon cancer', pred: 'colon', pos: 'NOUN' },
+    { gold: 'histidine 626-to-arginine', pred: 'histidine', pos: 'NOUN' },
+    { gold: 'deletion of valine 624, valine 625', pred: 'deletion', pos: 'ADP NOUN NUM PUNCT NOUN NUM' },
+  ],
+  examplesLeft: [
+    { gold: 'autosomal dominant hypercholesterolemia', pred: 'hypercholesterolemia', pos: 'ADJ ADJ' },
+    { gold: 'low-density lipoprotein receptor', pred: 'receptor', pos: 'ADJ NOUN' },
+    { gold: 'impaired glucose tolerance', pred: 'tolerance', pos: 'ADJ NOUN' },
+    { gold: 'Impaired insulin secretion', pred: 'secretion', pos: 'ADJ NOUN' },
+    { gold: 'Chinese hamster', pred: 'hamster', pos: 'ADJ' },
+    { gold: 'pegylated interferon', pred: 'interferon', pos: 'ADJ' },
+    { gold: 'hepatocellular carcinoma', pred: 'carcinoma', pos: 'ADJ' },
+    { gold: 'end-stage liver disease', pred: 'disease', pos: 'ADJ NOUN' },
+    { gold: 'fibrodysplasia ossificans progressiva', pred: 'progressiva', pos: 'ADJ NOUN' },
+  ],
+  falsePositives: [
+    ['expression', 18], ['gene', 18], ['study', 18], ['treatment', 14], ['analysis', 14],
+    ['significantly', 12], ['activity', 12], ['nucleotide', 12], ['cell', 12], ['significant', 11],
+  ],
+};
+
+/* =========================================================================
+   MARKDOWN CONTENT BLOCKS
+   ========================================================================= */
+const MD = {
+  intro: `
+GLiNER-extracted terms from **48 PubMed abstracts** were compared against gold-standard entity
+annotations from **BioRED** (\`BIORED.zip\`, official NCBI release — 400 train + 100 dev + 100 test
+= 600 abstracts total). The two files were joined on **PMID**; only 48 of BioRED's 600 documents
+overlap with \`FullSampleGloria_Pmed_GlinerLabels.parquet\`, which covers 881,341 of PubMed's
+~38 million articles (~2.3%).
+
+Every gold entity was compared against GLiNER's predicted spans using one-to-one, largest-overlap-first
+matching, then classified as *exact*, *partial*, or *no match*. For every partial match, the surrounding
+sentence was POS-tagged with scispaCy (\`en_core_sci_md\`) to see exactly **which words GLiNER dropped, and what part of speech they were**.
+`,
+  headline: `
+**The main finding:** GLiNER systematically collapses multi-word biomedical compound terms down to a
+single token. Which side it cuts is predictable by part of speech — dropping leading **adjectives**
+from the left (\`autosomal dominant hypercholesterolemia\` → \`hypercholesterolemia\`) and trailing
+**noun chains** from the right (\`thiazide-sensitive Na(+)-Cl(-) cotransporter\` → \`thiazide-sensitive\`).
+The single largest cell in the whole POS-by-side breakdown is **NOUN dropped from the RIGHT — 115 tokens**,
+more than a third of all 313 omitted tokens.
+`,
+  matchDist: `
+Only **17.8%** of gold entities got any overlapping GLiNER prediction at all — the dominant signal is
+that GLiNER's general-purpose term extraction largely doesn't propose spans near BioRED's curated entity
+set. Allowing partial (overlapping, non-identical) matches under strict one-to-one assignment roughly
+doubles the effective true positives (161 → 317), showing boundary imprecision is a real secondary factor
+on top of outright misses.
+`,
+  boundary: `
+Among the 156 partial matches, GLiNER is more likely to under-extend on the **right** edge of a span
+(46.8%) than the left (28.9%), with both boundaries wrong 24.4% of the time.
+`,
+  posOmitted: `
+Splitting omitted tokens by which side they were dropped from sharpens the picture: **ADJ is
+disproportionately lost from the left** (34 of 45 left-side omissions) while **NOUN dominates the right**
+(115 of 156 right-side omissions) — consistent with GLiNER keeping a head-ish word and dropping modifiers
+on one side or the head noun's continuation on the other.
+`,
+  entityRecall: `
+Recall varies sharply by entity type. **CellLine reaches 0%** — every gold mention (\`HeLa\`, \`HEK293\`,
+\`SCID-HuH-7\`, \`SH-SY5Y\`, ...) is an alphanumeric identifier, not a natural-language phrase, and GLiNER's
+extractor appears tuned for ordinary vocabulary rather than identifier-shaped strings. **SequenceVariant**
+(11.9%) has the same problem — mutation notation like \`D374Y\`, \`R3500Q\`, \`Delta30\` is missed almost
+entirely. **GeneOrGeneProduct**, the single largest category by volume (555 mentions), still only reaches
+12.4% recall.
+`,
+  transformations: `
+The dominant transformation pattern is literally **compound → single word**: \`NOUN NOUN → NOUN\` (30
+cases), \`ADJ NOUN → ADJ\` (17), \`ADJ NOUN → NOUN\` (11). GLiNER collapses 2–5 word compound terms to one
+token, and *which* token survives is inconsistent — sometimes the adjective, sometimes a noun.
+`,
+  examples: `
+Real rows pulled directly from \`pos_analysis_test_500.csv\` — struck-through text is what GLiNER dropped
+from the gold span. Two gold spans, \`breast cancer\` and \`colon cancer\`, both collapse to the exact same
+predicted term \`cancer\` — GLiNER's output alone can't distinguish which cancer type was meant.
+`,
+  falsePositives: `
+Precision is low (0.153 partial / 0.078 exact) for a second, distinct reason beyond boundary trimming:
+the most frequent GLiNER predictions with **no gold overlap at all** are generic scientific-writing
+vocabulary — \`expression\`, \`gene\`, \`study\`, \`treatment\`, \`analysis\`, \`significantly\`, \`activity\` — not
+plausible-but-wrong entity candidates. This inflates false positives independently of the compound-truncation
+error mode.
+`,
+  methodology: `
+- **Span recovery**: the GLiNER PubMed file has no character offsets, only bare term strings per PMID.
+  Each term's predicted span was recovered via the **first case-insensitive occurrence** of that exact
+  string in the document's title + abstract text. 90.1% of terms (2,076 / 2,304) were located verbatim;
+  the rest were excluded from span matching.
+- **One-to-one matching**: overlap scored as intersection-length / union-length; matches assigned
+  greedily by descending score, largest span first, so no gold entity or prediction is reused.
+- **Sample size caveat**: 48 documents and 156 partial matches is a pilot-scale signal, not a stable
+  estimate — bounded by how much of PubMed the GLiNER file happens to cover, not by anything missing
+  from BioRED itself (confirmed against the official 2.1MB \`BIORED.zip\` from \`ftp.ncbi.nlm.nih.gov\`).
+`,
+};
+
+/* =========================================================================
+   PALETTE (validated categorical set — see dataviz skill)
+   ========================================================================= */
+const COLORS = {
+  blue: '#2a78d6', blueDark: '#3987e5',
+  orange: '#eb6834', orangeDark: '#d95926',
+  aqua: '#1baf7a', aquaDark: '#199e70',
+  yellow: '#eda100', yellowDark: '#c98500',
+  red: '#e34948', redDark: '#e66767',
+  gridLight: '#e1e0d9', gridDark: '#2c2c2a',
+  textLight: '#52514e', textDark: '#c3c2b7',
+};
+const isDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+const c = (light, dark) => isDark() ? dark : light;
+
+/* =========================================================================
+   VUE COMPONENTS
+   ========================================================================= */
+const md = window.markdownit({ html: false, linkify: true });
+
+const Markdown = {
+  props: ['src'],
+  computed: { html() { return md.render(this.src || ''); } },
+  template: `<div class="prose-custom text-sm text-neutral-700 dark:text-neutral-300" v-html="html"></div>`,
+};
+
+const Card = {
+  props: { title: String, subtitle: String, full: { type: Boolean, default: false } },
+  template: `
+    <div :class="['bg-surface dark:bg-surface-dark border border-black/10 dark:border-white/10 rounded-2xl p-5 sm:p-6', full ? 'sm:col-span-2' : '']">
+      <h2 class="text-sm font-semibold mb-1">{{ title }}</h2>
+      <p v-if="subtitle" class="text-xs text-neutral-500 dark:text-neutral-400 mb-4 leading-relaxed">{{ subtitle }}</p>
+      <slot />
+    </div>`,
+};
+
+const StatTile = {
+  props: ['label', 'value', 'unit'],
+  template: `
+    <div class="bg-plane dark:bg-plane-dark border border-black/10 dark:border-white/10 rounded-xl px-4 py-3">
+      <div class="text-[11px] text-neutral-500 dark:text-neutral-400 mb-1">{{ label }}</div>
+      <div class="text-xl font-semibold">{{ value }}<span v-if="unit" class="text-xs font-normal text-neutral-500 dark:text-neutral-400">{{ unit }}</span></div>
+    </div>`,
+};
+
+const BarChart = {
+  props: { labels: Array, datasets: Array, horizontal: { type: Boolean, default: true }, height: { type: Number, default: 260 } },
+  mounted() { this.render(); },
+  beforeUnmount() { if (this.chart) this.chart.destroy(); },
+  methods: {
+    render() {
+      const ctx = this.$refs.canvas.getContext('2d');
+      const grid = c(COLORS.gridLight, COLORS.gridDark);
+      const text = c(COLORS.textLight, COLORS.textDark);
+      this.chart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: this.labels, datasets: this.datasets },
+        options: {
+          indexAxis: this.horizontal ? 'y' : 'x',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: this.datasets.length > 1, position: 'bottom', labels: { color: text, boxWidth: 10, boxHeight: 10, font: { size: 11 } } },
+            tooltip: { padding: 8, titleFont: { size: 12 }, bodyFont: { size: 12 } },
+          },
+          scales: {
+            x: { grid: { color: grid, drawTicks: false }, border: { display: false }, ticks: { color: text, font: { size: 11 } } },
+            y: { grid: { display: false }, border: { display: false }, ticks: { color: text, font: { size: 11.5 } } },
+          },
+        },
+      });
+    },
+  },
+  template: `<div class="chart-wrap" :style="{ height: height + 'px' }"><canvas ref="canvas"></canvas></div>`,
+};
+
+const ExampleTable = {
+  props: ['rows'],
+  methods: {
+    parts(gold, pred) {
+      const idx = gold.indexOf(pred);
+      if (idx === -1) return [gold, '', ''];
+      return [gold.slice(0, idx).trim(), gold.slice(idx, idx + pred.length), gold.slice(idx + pred.length).trim()];
+    },
+  },
+  template: `
+    <div class="overflow-x-auto">
+    <table class="w-full text-sm border-collapse">
+      <thead>
+        <tr class="text-[11px] text-neutral-500 dark:text-neutral-400 border-b border-neutral-300 dark:border-neutral-700">
+          <th class="text-left font-medium py-2 pr-3">Gold span</th>
+          <th class="text-left font-medium py-2 pr-3">GLiNER predicted</th>
+          <th class="text-left font-medium py-2">Dropped POS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(row, i) in rows" :key="i" class="border-b border-neutral-200 dark:border-neutral-800 last:border-0">
+          <td class="py-2 pr-3 font-mono text-[13px]">
+            <template v-if="parts(row.gold, row.pred)[0]"><span class="line-through decoration-red-500 decoration-[1.5px] bg-red-500/10 text-neutral-500 dark:text-neutral-400 rounded px-0.5">{{ parts(row.gold, row.pred)[0] }}</span> </template><span>{{ row.pred }}</span><template v-if="parts(row.gold, row.pred)[2]"> <span class="line-through decoration-red-500 decoration-[1.5px] bg-red-500/10 text-neutral-500 dark:text-neutral-400 rounded px-0.5">{{ parts(row.gold, row.pred)[2] }}</span></template>
+          </td>
+          <td class="py-2 pr-3 font-mono text-[13px] text-blue-600 dark:text-blue-400">{{ row.pred }}</td>
+          <td class="py-2 font-mono text-[11px] text-neutral-500 dark:text-neutral-400">{{ row.pos }}</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>`,
+};
+
+/* =========================================================================
+   APP
+   ========================================================================= */
+const App = {
+  components: { Markdown, Card, StatTile, BarChart, ExampleTable },
+  data() {
+    return { D: DATA, MD, showEntityTable: false };
+  },
+  computed: {
+    matchDatasets() {
+      return [{ data: DATA.matchDistribution.map(d => d.value), backgroundColor: [c(COLORS.blue, COLORS.blueDark), c(COLORS.yellow, COLORS.yellowDark), c(COLORS.red, COLORS.redDark)], borderRadius: 4, barThickness: 26 }];
+    },
+    matchLabels() { return DATA.matchDistribution.map(d => `${d.label}`); },
+
+    boundaryDatasets() {
+      return [{ data: DATA.boundaryDirection.map(d => d.value), backgroundColor: [c(COLORS.orange, COLORS.orangeDark), c(COLORS.blue, COLORS.blueDark), c(COLORS.aqua, COLORS.aquaDark)], borderRadius: 4, barThickness: 26 }];
+    },
+    boundaryLabels() { return DATA.boundaryDirection.map(d => d.label); },
+
+    posLabels() { return DATA.posOmitted.map(d => d.pos); },
+    posDatasets() {
+      return [
+        { label: 'Dropped from LEFT', data: DATA.posOmitted.map(d => d.left), backgroundColor: c(COLORS.blue, COLORS.blueDark), borderRadius: 3, barThickness: 10 },
+        { label: 'Dropped from RIGHT', data: DATA.posOmitted.map(d => d.right), backgroundColor: c(COLORS.orange, COLORS.orangeDark), borderRadius: 3, barThickness: 10 },
+      ];
+    },
+
+    entityLabels() { return DATA.entityRecall.map(d => d.type); },
+    entityDatasets() {
+      return [{ data: DATA.entityRecall.map(d => d.recall), backgroundColor: DATA.entityRecall.map(d => d.recall === 0 ? c(COLORS.red, COLORS.redDark) : c(COLORS.blue, COLORS.blueDark)), borderRadius: 4, barThickness: 22 }];
+    },
+
+    transformLabels() { return DATA.transformations.map(d => d.pattern); },
+    transformDatasets() {
+      return [{ data: DATA.transformations.map(d => d.count), backgroundColor: c(COLORS.aqua, COLORS.aquaDark), borderRadius: 4, barThickness: 20 }];
+    },
+
+    fpLabels() { return DATA.falsePositives.map(d => d[0]); },
+    fpDatasets() {
+      return [{ data: DATA.falsePositives.map(d => d[1]), backgroundColor: c('#898781', '#898781'), borderRadius: 4, barThickness: 18 }];
+    },
+  },
+  template: `
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+      <header class="mb-8">
+        <div class="text-[11px] uppercase tracking-wide text-neutral-500 dark:text-neutral-400 mb-2">POS Error Analysis</div>
+        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight mb-3">GLiNER vs. BioRED</h1>
+        <Markdown :src="MD.intro" />
+      </header>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        <StatTile label="Matched documents" :value="D.scope.matchedDocs" />
+        <StatTile label="Gold entities" :value="D.scope.totalGold" />
+        <StatTile label="Exact-match F1" value="0.083" />
+        <StatTile label="Partial-match F1" value="0.164" />
+      </div>
+
+      <Card title="Headline finding" full class="mb-6">
+        <Markdown :src="MD.headline" />
+      </Card>
+
+      <div class="grid sm:grid-cols-2 gap-5">
+
+        <Card title="Match distribution" subtitle="Of 1,783 gold entities, share exactly matched, partially matched, or missed">
+          <BarChart :labels="matchLabels" :datasets="matchDatasets" :height="180" />
+          <Markdown :src="MD.matchDist" />
+        </Card>
+
+        <Card title="Boundary-error direction" subtitle="Among 156 partial matches, which side GLiNER got wrong">
+          <BarChart :labels="boundaryLabels" :datasets="boundaryDatasets" :height="180" />
+          <Markdown :src="MD.boundary" />
+        </Card>
+
+        <Card title="POS of omitted tokens, by side" subtitle="Part-of-speech of every dropped gold token, split LEFT vs RIGHT" full>
+          <BarChart :labels="posLabels" :datasets="posDatasets" :height="320" />
+          <Markdown :src="MD.posOmitted" />
+        </Card>
+
+        <Card title="Recall by gold entity type" subtitle="Share of each BioRED entity type matched by GLiNER (exact + partial)" full>
+          <BarChart :labels="entityLabels" :datasets="entityDatasets" :height="240" />
+          <Markdown :src="MD.entityRecall" />
+          <button @click="showEntityTable = !showEntityTable" class="text-xs text-neutral-500 dark:text-neutral-400 underline mt-2">
+            {{ showEntityTable ? 'Hide' : 'Show' }} table
+          </button>
+          <div v-if="showEntityTable" class="overflow-x-auto mt-3">
+            <table class="w-full text-xs border-collapse">
+              <thead>
+                <tr class="text-neutral-500 dark:text-neutral-400 border-b border-neutral-300 dark:border-neutral-700">
+                  <th class="text-left font-medium py-1.5 pr-3">Entity type</th>
+                  <th class="text-left font-medium py-1.5 pr-3">Total gold</th>
+                  <th class="text-left font-medium py-1.5 pr-3">Exact</th>
+                  <th class="text-left font-medium py-1.5 pr-3">Partial</th>
+                  <th class="text-left font-medium py-1.5">Recall</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="e in D.entityRecall" :key="e.type" class="border-b border-neutral-200 dark:border-neutral-800 last:border-0">
+                  <td class="py-1.5 pr-3">{{ e.type }}</td>
+                  <td class="py-1.5 pr-3 font-mono">{{ e.total }}</td>
+                  <td class="py-1.5 pr-3 font-mono">{{ e.exact }}</td>
+                  <td class="py-1.5 pr-3 font-mono">{{ e.partial }}</td>
+                  <td class="py-1.5 font-mono">{{ e.recall.toFixed(1) }}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card title="Most common POS transformations" subtitle="Gold POS sequence → predicted POS sequence (partial matches only, top 8)" full>
+          <BarChart :labels="transformLabels" :datasets="transformDatasets" :height="300" />
+          <Markdown :src="MD.transformations" />
+        </Card>
+
+        <Card title="Example: RIGHT-boundary drops" subtitle="Real rows — struck-through text is what GLiNER dropped" full>
+          <ExampleTable :rows="D.examplesRight" />
+        </Card>
+
+        <Card title="Example: LEFT-boundary drops" subtitle="Real rows — struck-through text is what GLiNER dropped" full>
+          <ExampleTable :rows="D.examplesLeft" />
+        </Card>
+
+        <Card title="Top false-positive predictions" subtitle="GLiNER terms with no gold overlap anywhere — generic scientific vocabulary, not near-misses" full>
+          <BarChart :labels="fpLabels" :datasets="fpDatasets" :height="280" />
+          <Markdown :src="MD.falsePositives" />
+        </Card>
+
+        <Card title="Methodology & caveats" full>
+          <Markdown :src="MD.methodology" />
+        </Card>
+
+      </div>
+
+      <footer class="mt-10 text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed">
+        Source: <code>pos_analysis_summary.json</code> / <code>pos_analysis_test_500.csv</code> —
+        BioRED (<code>BIORED.zip</code>, 600 abstracts, verified against the official
+        <code>ftp.ncbi.nlm.nih.gov/pub/lu/BioRED/</code> release) matched to
+        <code>FullSampleGloria_Pmed_GlinerLabels.parquet</code> by PMID.
+        random_state = 42 for the manual sanity-check sample.
+      </footer>
+    </div>
+  `,
+};
+
+Vue.createApp(App).mount('#app');
+</script>
+</body>
+</html>
