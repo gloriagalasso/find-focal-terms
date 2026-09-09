@@ -9,6 +9,7 @@ output/
 *.tsv.gz
 *.csv.gz
 *.zip
+*.csv
 
 # Python
 __pycache__/
@@ -23,6 +24,3 @@ __pycache__/
 
 # Logs
 *.log
-
-# Notes
-embedding_instructions.md
